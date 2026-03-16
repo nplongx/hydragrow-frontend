@@ -1,7 +1,7 @@
 // src/hooks/useDeviceSensor.ts
-import { useState, useEffect } from 'react';
-import { invoke } from '@tauri-apps/api/core'; // Dùng '@tauri-apps/api' nếu là v1
-import { listen, UnlistenFn } from '@tauri-apps/api/event';
+import { useState, useEffect, useCallback } from 'react';
+import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 import { SensorData, AlertPayload, StatusPayload } from '../types/models';
 
 export function useDeviceSensor(deviceId: string) {
@@ -13,32 +13,37 @@ export function useDeviceSensor(deviceId: string) {
   useEffect(() => {
     if (!deviceId) return;
 
-    let unlistenSensor: UnlistenFn;
-    let unlistenStatus: UnlistenFn;
-    let unlistenAlert: UnlistenFn;
+    // Khai báo các biến lưu trữ Promise của hàm listen
+    let sensorPromise: Promise<() => void>;
+    let statusPromise: Promise<() => void>;
+    let alertPromise: Promise<() => void>;
 
     const setup = async () => {
       try {
         // 1. Lấy data mới nhất để hiển thị ngay lập tức
-        const initialData = await invoke<SensorData>('get_latest_sensor', { deviceId });
+        const initialData = await invoke<SensorData>('get_latest_sensor_data', { deviceId });
         setSensorData(initialData);
         setIsLoading(false);
 
-        // 2. Yêu cầu Rust khởi động WebSocket listener ngầm
-        await invoke('start_ws_listener', { deviceId });
-
-        // 3. Đăng ký nhận Event từ Rust (emit từ file ws_client.rs)
-        unlistenSensor = await listen<SensorData>('sensor_update', (event) => {
+        // 2. ĐĂNG KÝ LẮNG NGHE TRƯỚC (QUAN TRỌNG: Phải đặt trước start_ws_listener)
+        sensorPromise = listen<SensorData>('sensor_update', (event) => {
           setSensorData(event.payload);
         });
 
-        unlistenStatus = await listen<StatusPayload>('device_status', (event) => {
+        statusPromise = listen<StatusPayload>('device_status', (event) => {
+          console.log("🟢 Nhận được trạng thái từ Rust:", event.payload); // In ra để dễ debug
           setDeviceStatus(event.payload);
         });
 
-        unlistenAlert = await listen<AlertPayload>('alert', (event) => {
-          setAlerts((prev) => [event.payload, ...prev].slice(0, 10)); // Giữ 10 alert mới nhất
+        alertPromise = listen<AlertPayload>('alert', (event) => {
+          setAlerts((prev) => [event.payload, ...prev].slice(0, 10));
         });
+
+        // Đợi tất cả listener đăng ký xong xuôi...
+        await Promise.all([sensorPromise, statusPromise, alertPromise]);
+
+        // 3. RỒI MỚI BẢO RUST KHỞI ĐỘNG WEBSOCKET
+        await invoke('start_ws_listener', { deviceId });
 
       } catch (error) {
         console.error("Lỗi khởi tạo sensor:", error);
@@ -48,13 +53,26 @@ export function useDeviceSensor(deviceId: string) {
 
     setup();
 
-    // Cleanup function: Hủy đăng ký lắng nghe khi component unmount
+    // 4. Cleanup function chuẩn xác (đợi unlisten resolve mới gọi)
     return () => {
-      if (unlistenSensor) unlistenSensor();
-      if (unlistenStatus) unlistenStatus();
-      if (unlistenAlert) unlistenAlert();
+      if (sensorPromise) sensorPromise.then(unlisten => unlisten());
+      if (statusPromise) statusPromise.then(unlisten => unlisten());
+      if (alertPromise) alertPromise.then(unlisten => unlisten());
     };
   }, [deviceId]);
 
-  return { sensorData, deviceStatus, alerts, isLoading };
+  const updatePumpStatusOptimistically = useCallback((pumpId: string, action: 'on' | 'off') => {
+    setSensorData(prevData => {
+      if (!prevData) return prevData;
+      return {
+        ...prevData,
+        pump_status: {
+          ...prevData.pump_status,
+          [pumpId]: action
+        }
+      };
+    });
+  }, []);
+
+  return { sensorData, deviceStatus, alerts, isLoading, updatePumpStatusOptimistically };
 }

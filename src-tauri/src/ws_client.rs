@@ -8,7 +8,6 @@ use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
 
 use crate::http_client::get_settings;
 use crate::models::{AlertPayload, SensorData, StatusPayload};
-use crate::valve_guard::ValveGuardState;
 
 /// Giả định cấu trúc message từ Backend gửi qua WS có chứa trường `type` để phân biệt
 #[derive(Debug, Deserialize)]
@@ -70,10 +69,6 @@ pub async fn start_ws_listener(app: AppHandle, device_id: String) {
                                 if let Ok(ws_msg) = serde_json::from_str::<WsMessage>(&text) {
                                     match ws_msg {
                                         WsMessage::SensorUpdate(data) => {
-                                            // [QUAN TRỌNG] Cập nhật State cho ValveGuard trước để đảm bảo an toàn
-                                            let guard = app.state::<ValveGuardState>();
-                                            guard.update_status(data.pump_status.clone());
-
                                             // Bắn event cho React
                                             let _ = app.emit("sensor_update", data);
                                         }
@@ -100,8 +95,6 @@ pub async fn start_ws_listener(app: AppHandle, device_id: String) {
                                     serde_json::from_str::<SensorData>(&text)
                                 {
                                     // Fallback: Nếu backend chỉ gửi thẳng cục JSON SensorData mà không có Wrapper
-                                    let guard = app.state::<ValveGuardState>();
-                                    guard.update_status(sensor_data.pump_status.clone());
                                     let _ = app.emit("sensor_update", sensor_data);
                                 } else {
                                     println!("[WebSocket] Không thể parse bản tin: {}", text);

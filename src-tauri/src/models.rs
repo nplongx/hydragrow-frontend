@@ -104,6 +104,10 @@ pub struct DosingCalibration {
     pub mixing_delay_sec: i64,
     pub ec_step_ratio: f64,
     pub ph_step_ratio: f64,
+    pub pump_capacity_ml_per_sec: f64,
+    // Đã thêm 2 trường từ state.rs: active_mixing_sec và sensor_stabilize_sec
+    pub active_mixing_sec: i64,
+    pub sensor_stabilize_sec: i64,
     pub last_calibrated: String,
 }
 
@@ -120,25 +124,23 @@ pub struct SafetyConfig {
     pub cooldown_sec: i64,
     pub max_dose_per_hour: f64,
 
-    pub water_level_critical_min: f64, // Mức nước nguy hiểm (cạn quá mức -> cháy bơm)
-    pub max_refill_cycles_per_hour: i64, // Chống kẹt phao (bơm liên tục)
-    pub max_drain_cycles_per_hour: i64, // Chống rò rỉ (xả liên tục)
-    pub max_refill_duration_sec: i64,  // Chống tràn (thời gian bơm max 1 lần)
-    pub max_drain_duration_sec: i64,   // Chống kẹt van xả
+    pub water_level_critical_min: f64, // Mức nước nguy hiểm
+    pub max_refill_cycles_per_hour: i64,
+    pub max_drain_cycles_per_hour: i64,
+    pub max_refill_duration_sec: i64,
+    pub max_drain_duration_sec: i64,
 
     pub min_temp_limit: f64,
     pub max_temp_limit: f64,
 
     pub emergency_shutdown: i64,
-
-    // XÓA: water_level_target và water_level_max (Vì đã sang WaterConfig)
     pub last_updated: String,
 }
 
 // Struct phụ trợ cho quy trình water_sequence (Cấp/xả nước tự động)
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct WaterConfig {
-    pub device_id: String, // Thêm cho chuẩn form
+    pub device_id: String,
     pub water_level_min: f64,
     pub water_level_target: f64,
     pub water_level_max: f64,
@@ -146,7 +148,70 @@ pub struct WaterConfig {
     pub circulation_mode: String,
     pub circulation_on_sec: i64,
     pub circulation_off_sec: i64,
-    pub last_updated: String, // Thêm để tracking
+
+    pub water_level_tolerance: f64,
+    pub auto_refill_enabled: i64,
+    pub auto_drain_overflow: i64,
+    pub auto_dilute_enabled: i64,
+    pub dilute_drain_amount_cm: f64,
+    pub scheduled_water_change_enabled: i64,
+    pub water_change_interval_sec: i64,
+    pub scheduled_drain_amount_cm: f64,
+
+    pub last_updated: String,
+}
+
+// ── Aggregated Data (Đẩy xuống ESP32) ────────────────────────────────
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct Esp32AggregatedConfig {
+    pub device_id: String,
+    pub control_mode: String,
+    pub is_enabled: bool,
+
+    // --- 1. DEVICE CONFIG ---
+    pub ec_target: f64,
+    pub ec_tolerance: f64,
+    pub ph_target: f64,
+    pub ph_tolerance: f64,
+
+    // --- 2. WATER CONFIG ---
+    pub water_level_min: f64,
+    pub water_level_target: f64,
+    pub water_level_max: f64,
+    pub water_level_tolerance: f64,
+    pub auto_refill_enabled: bool,
+    pub auto_drain_overflow: bool,
+
+    pub auto_dilute_enabled: bool,
+    pub dilute_drain_amount_cm: f64,
+
+    pub scheduled_water_change_enabled: bool,
+    pub water_change_interval_sec: i64,
+    pub scheduled_drain_amount_cm: f64,
+
+    // --- 3. SAFETY CONFIG ---
+    pub emergency_shutdown: bool,
+    pub max_ec_limit: f64,
+    pub min_ph_limit: f64,
+    pub max_ph_limit: f64,
+    pub max_ec_delta: f64,
+    pub max_ph_delta: f64,
+    pub max_dose_per_cycle: f64,
+    pub water_level_critical_min: f64,
+    pub max_refill_duration_sec: i64,
+    pub max_drain_duration_sec: i64,
+
+    // --- 4. DOSING & PUMP ---
+    pub ec_gain_per_ml: f64,
+    pub ph_shift_up_per_ml: f64,
+    pub ph_shift_down_per_ml: f64,
+    pub mixing_delay_sec: i64,
+    pub ec_step_ratio: f64,
+    pub ph_step_ratio: f64,
+    pub pump_capacity_ml_per_sec: f64,
+    // Đã thêm 2 trường từ state.rs
+    pub active_mixing_sec: i64,
+    pub sensor_stabilize_sec: i64,
 }
 
 // ── API Requests ─────────────────────────────────────────────────────

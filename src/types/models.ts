@@ -1,7 +1,6 @@
 // src/types/models.ts
 
 export type DeviceState = 'on' | 'off';
-export type ValveState = 'open' | 'closed';
 
 export interface PumpStatus {
   A: DeviceState;
@@ -9,9 +8,9 @@ export interface PumpStatus {
   PH_UP: DeviceState;
   PH_DOWN: DeviceState;
   CIRCULATION: DeviceState;
+  CHAMBER_PUMP: DeviceState,
   WATER_PUMP: DeviceState;
-  VAN_IN: ValveState;
-  VAN_OUT: ValveState;
+  DRAIN_PUMP: DeviceState;
 }
 
 export interface SensorData {

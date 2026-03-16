@@ -18,7 +18,7 @@ export function useDeviceControl(deviceId: string) {
       // Rust trả Err(String) về, nó sẽ văng vào catch ở dạng string
       setError(typeof err === 'string' ? err : 'Đã có lỗi xảy ra');
 
-      // Bắn luôn OS Notification báo lỗi cho ngầu
+      // Bắn luôn OS Notification báo lỗi
       await invoke('trigger_os_notification', {
         title: "Lỗi điều khiển",
         body: typeof err === 'string' ? err : 'Hệ thống từ chối lệnh'
@@ -29,28 +29,14 @@ export function useDeviceControl(deviceId: string) {
     }
   };
 
-  const toggleValve = async (valve: 'VAN_IN' | 'VAN_OUT', action: 'open' | 'closed') => {
-    return executeCommand('manual_valve', { valve, action });
-  };
-
+  // Chỉ giữ lại hàm điều khiển Bơm (Pump)
   const togglePump = async (pump: string, action: 'on' | 'off', durationSec?: number) => {
     return executeCommand('manual_pump', { pump, action, durationSec });
-  };
-
-  const startRefillSequence = async () => {
-    return executeCommand('start_water_refill', {});
-  };
-
-  const startDrainSequence = async () => {
-    return executeCommand('start_water_drain', {});
   };
 
   return {
     isProcessing,
     error,
-    toggleValve,
     togglePump,
-    startRefillSequence,
-    startDrainSequence
   };
 }
