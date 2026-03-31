@@ -74,16 +74,6 @@ pub struct DeviceConfig {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct SensorCalibration {
-    pub device_id: String,
-    pub ph_v7: f64,
-    pub ph_v4: f64,
-    pub ec_factor: f64,
-    pub temp_offset: f64,
-    pub last_calibrated: String,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct PumpCalibration {
     pub id: String,
     pub device_id: String,
@@ -236,4 +226,23 @@ pub struct AlertPayload {
 pub struct StatusPayload {
     pub is_online: bool,
     pub last_seen: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SensorCalibration {
+    pub device_id: String,
+    pub ph_v7: f32,
+    pub ph_v4: f32,
+    pub ec_factor: f32,
+    pub ec_offset: f32,
+    pub temp_offset: f32,
+    pub temp_compensation_beta: f32,
+    pub sampling_interval: i64,
+    pub publish_interval: i64,
+    pub moving_average_window: i64,
+    pub is_ph_enabled: i32,
+    pub is_ec_enabled: i32,
+    pub is_temp_enabled: i32,
+    pub is_water_level_enabled: i32,
+    pub last_calibrated: String,
 }

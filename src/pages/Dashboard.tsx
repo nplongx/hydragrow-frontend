@@ -16,8 +16,6 @@ const Dashboard = () => {
         const settings: any = await invoke('load_settings');
         if (settings && settings.device_id) {
           setDeviceId(settings.device_id);
-
-          _
         }
       } catch (error) {
         console.error("Lỗi khi tải cài đặt:", error);
@@ -37,32 +35,36 @@ const Dashboard = () => {
     );
   }
 
-  // Nếu chưa có Device ID (Người dùng chưa cấu hình trong Settings)
-  // if (!deviceId) {
-  //   return (
-  //     <div className="flex flex-col items-center justify-center h-full space-y-4 p-6 text-center animate-in fade-in">
-  //       <div className="p-4 bg-slate-900 rounded-full border border-slate-800">
-  //         <Settings size={32} className="text-slate-400" />
-  //       </div>
-  //       <h2 className="text-xl font-bold text-white">Chưa cấu hình thiết bị</h2>
-  //       <p className="text-sm text-slate-400 max-w-xs">
-  //         Vui lòng vào mục Cài đặt để nhập Device ID và các thông số kết nối trước khi xem Dashboard.
-  //       </p>
-  //     </div>
-  //   );
-  // }
+  // Nếu chưa có Device ID(Người dùng chưa cấu hình trong Settings)
+  if (!deviceId) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full space-y-4 p-6 text-center animate-in fade-in">
+        <div className="p-4 bg-slate-900 rounded-full border border-slate-800">
+          <Settings size={32} className="text-slate-400" />
+        </div>
+        <h2 className="text-xl font-bold text-white">Chưa cấu hình thiết bị</h2>
+        <p className="text-sm text-slate-400 max-w-xs">
+          Vui lòng vào mục Cài đặt để nhập Device ID và các thông số kết nối trước khi xem Dashboard.
+        </p>
+      </div>
+    );
+  }
 
   // Khởi tạo render chính
   return <DashboardContent deviceId={deviceId} />;
 };
 
+
+
+
 // --- COMPONENT CON CHỨA LOGIC CHÍNH ---
 // Tách ra để hooks (useDeviceSensor, useDeviceControl) chỉ chạy khi đã có deviceId
 const DashboardContent = ({ deviceId }: { deviceId: string }) => {
-  const { sensorData, deviceStatus, isLoading } = useDeviceSensor(deviceId);
-  const { isProcessing, startRefillSequence, startDrainSequence } = useDeviceControl(deviceId);
+  const { isProcessing, togglePump } = useDeviceControl(deviceId);
+  const { sensorData, deviceStatus, isLoading, updatePumpStatusOptimistically } = useDeviceSensor("device_001");
 
-  if (isLoading) {
+
+  if (isLoading || !sensorData) {
     return (
       <div className="flex items-center justify-center h-full">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-500"></div>
@@ -70,12 +72,21 @@ const DashboardContent = ({ deviceId }: { deviceId: string }) => {
     );
   }
 
-  // Đảm bảo data luôn là một object có chứa các thuộc tính cần thiết là kiểu số
-  const data = {
-    ec_value: Number(sensorData?.ec_value) || 0,
-    ph_value: Number(sensorData?.ph_value) || 0,
-    temp_value: Number(sensorData?.temp_value) || 0,
-    water_level: Number(sensorData?.water_level) || 0,
+  // Fallback nếu chưa có data
+  const pumps = sensorData.pump_status || {};
+
+  const handleToggle = async (pumpId: string, currentStatus: string | undefined) => {
+    const isOn = currentStatus === 'on';
+    const targetAction = isOn ? 'off' : 'on';
+
+    // A. OPTIMISTIC UPDATE: Cập nhật UI ngay lập tức cho người dùng thấy mượt mà
+    updatePumpStatusOptimistically(pumpId, targetAction);
+
+    const success = await togglePump(pumpId, targetAction);
+
+    if (!success) {
+      updatePumpStatusOptimistically(pumpId, isOn ? 'on' : 'off');
+    }
   };
 
   return (
@@ -107,7 +118,7 @@ const DashboardContent = ({ deviceId }: { deviceId: string }) => {
             <span className="font-semibold text-sm">Dinh dưỡng (EC)</span>
           </div>
           <div className="relative z-10">
-            <span className="text-4xl font-bold text-white">{data.ec_value.toFixed(2)}</span>
+            <span className="text-4xl font-bold text-white">{sensorData.ec_value}</span>
             <span className="text-slate-400 ml-1">mS/cm</span>
           </div>
           <div className="absolute -bottom-10 -right-10 w-32 h-32 bg-blue-500/10 rounded-full blur-2xl"></div>
@@ -120,7 +131,7 @@ const DashboardContent = ({ deviceId }: { deviceId: string }) => {
             <span className="font-semibold text-sm">Độ pH</span>
           </div>
           <div className="relative z-10">
-            <span className="text-4xl font-bold text-white">{data.ph_value.toFixed(1)}</span>
+            <span className="text-4xl font-bold text-white">{sensorData.ph_value}</span>
           </div>
           <div className="absolute -bottom-10 -right-10 w-32 h-32 bg-fuchsia-500/10 rounded-full blur-2xl"></div>
         </div>
@@ -132,7 +143,7 @@ const DashboardContent = ({ deviceId }: { deviceId: string }) => {
             <span className="font-semibold text-sm">Nhiệt độ</span>
           </div>
           <div className="relative z-10">
-            <span className="text-4xl font-bold text-white">{data.temp_value.toFixed(1)}</span>
+            <span className="text-4xl font-bold text-white">{sensorData.temp_value}</span>
             <span className="text-slate-400 ml-1">°C</span>
           </div>
           <div className="absolute -bottom-10 -right-10 w-32 h-32 bg-orange-500/10 rounded-full blur-2xl"></div>
@@ -145,7 +156,7 @@ const DashboardContent = ({ deviceId }: { deviceId: string }) => {
             <span className="font-semibold text-sm">Mực nước</span>
           </div>
           <div className="relative z-10">
-            <span className="text-4xl font-bold text-white">{data.water_level.toFixed(0)}</span>
+            <span className="text-4xl font-bold text-white">{sensorData.water_level}</span>
             <span className="text-slate-400 ml-1">%</span>
           </div>
           <div className="absolute -bottom-10 -right-10 w-32 h-32 bg-cyan-500/10 rounded-full blur-2xl"></div>
@@ -158,7 +169,7 @@ const DashboardContent = ({ deviceId }: { deviceId: string }) => {
         <div className="flex space-x-3">
           <button
             disabled={isProcessing || !deviceStatus?.is_online}
-            onClick={startRefillSequence}
+            onClick={() => handleToggle("WATER_PUMP", pumps.WATER_PUMP)}
             className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white py-3 rounded-2xl font-semibold transition-all active:scale-95 disabled:opacity-50 disabled:active:scale-100 flex items-center justify-center space-x-2"
           >
             {isProcessing ? (
@@ -171,7 +182,7 @@ const DashboardContent = ({ deviceId }: { deviceId: string }) => {
 
           <button
             disabled={isProcessing || !deviceStatus?.is_online}
-            onClick={startDrainSequence}
+            onClick={() => handleToggle("DRAIN_PUMP", pumps.DRAIN_PUMP)}
             className="flex-1 bg-slate-800 border border-slate-700 hover:bg-slate-700 text-white py-3 rounded-2xl font-semibold transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center space-x-2"
           >
             <Waves size={18} className="rotate-180" />

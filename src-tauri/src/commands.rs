@@ -1,6 +1,6 @@
 // src-tauri/src/commands.rs
 use reqwest::Client;
-use serde::{de::DeserializeOwned, Serialize};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_json::Value;
 use tauri::AppHandle;
 use tauri_plugin_store::StoreExt;
@@ -345,4 +345,44 @@ pub async fn manual_pump(
     };
 
     post(&app, &path, &payload).await
+}
+
+// ==========================================
+// 10. BLOCKCHAIN LOGS & VERIFICATION
+// ==========================================
+
+#[tauri::command]
+pub async fn get_blockchain_history(
+    app: tauri::AppHandle,
+    device_id: String,
+) -> Result<serde_json::Value, String> {
+    let path = format!("/api/blockchain/devices/{}", device_id);
+    crate::commands::get(&app, &path).await
+}
+
+#[tauri::command]
+pub async fn verify_blockchain_tx(
+    app: tauri::AppHandle,
+    tx_id: String,
+) -> Result<serde_json::Value, String> {
+    let path = format!("/api/blockchain/verify/{}", tx_id);
+    crate::commands::get(&app, &path).await
+}
+
+// Bổ sung luôn hàm POST phòng hờ sau này bạn cần gọi từ Frontend
+#[derive(serde::Serialize, Deserialize)]
+pub struct DeviceLogPayload {
+    pub device_id: String,
+    pub action: String,
+    pub value: f64,
+    pub timestamp: String,
+}
+
+#[tauri::command]
+pub async fn push_blockchain_log(
+    app: tauri::AppHandle,
+    payload: DeviceLogPayload,
+) -> Result<serde_json::Value, String> {
+    let path = "/api/blockchain/log";
+    crate::commands::post(&app, path, &payload).await
 }

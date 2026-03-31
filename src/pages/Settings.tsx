@@ -7,6 +7,12 @@ import {
 } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 
+interface ToggleSwitchProps {
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+  colorClass?: string;
+}
+
 // --- COMPONENTS PHỤ ---
 
 const InputGroup = ({ label, type = "number", value, onChange, step, desc }: any) => (
@@ -29,6 +35,18 @@ const SubCard = ({ title, children, className = "" }: any) => (
     {title && <h3 className="text-[11px] font-semibold text-slate-400 mb-3 uppercase tracking-wider">{title}</h3>}
     {children}
   </div>
+);
+
+const ToggleSwitch = ({ checked, onChange, colorClass = "bg-emerald-500" }: ToggleSwitchProps) => (
+  <button
+    type="button"
+    role="switch"
+    aria-checked={checked}
+    onClick={() => onChange(!checked)}
+    className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-slate-400 focus:ring-offset-2 focus:ring-offset-slate-900 ${checked ? colorClass : 'bg-slate-700'}`}
+  >
+    <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${checked ? 'translate-x-5' : 'translate-x-0'}`} />
+  </button>
 );
 
 const AccordionSection = ({ id, title, icon: Icon, color, children, isOpen, onToggle }: any) => {
@@ -67,11 +85,9 @@ const Settings = () => {
     scheduled_water_change_enabled: 0, water_change_interval_sec: 86400, scheduled_drain_amount_cm: 10.0, last_updated: ''
   });
 
-  // --- ĐÃ BỔ SUNG active_mixing_sec VÀ sensor_stabilize_sec ---
   const [dosingConfig, setDosingConfig] = useState({
     device_id: 'DEVICE_001', tank_volume_l: 50.0, ec_gain_per_ml: 0.1, ph_shift_up_per_ml: 0.2, ph_shift_down_per_ml: 0.2,
-    mixing_delay_sec: 300, ec_step_ratio: 0.4, ph_step_ratio: 0.1, pump_capacity_ml_per_sec: 1.5,
-    active_mixing_sec: 5, sensor_stabilize_sec: 5, last_calibrated: ''
+    mixing_delay_sec: 300, ec_step_ratio: 0.4, ph_step_ratio: 0.1, pump_capacity_ml_per_sec: 1.5, last_calibrated: ''
   });
 
   const [safetyConfig, setSafetyConfig] = useState({
@@ -82,7 +98,10 @@ const Settings = () => {
   });
 
   const [sensorCalib, setSensorCalib] = useState({
-    ph_v7: 2.5, ph_v4: 1.428, ec_factor: 880.0, temp_offset: 0.0, last_calibrated: ''
+    device_id: 'DEVICE_001',
+    ph_v7: 2.5, ph_v4: 1.428, ec_factor: 880.0, ec_offset: 0.0, temp_offset: 0.0, temp_compensation_beta: 0.02,
+    sampling_interval: 1000, publish_interval: 5000, moving_average_window: 10,
+    is_ph_enabled: 1, is_ec_enabled: 1, is_temp_enabled: 1, is_water_level_enabled: 1, last_calibrated: ''
   });
 
   const [appSettings, setAppSettings] = useState({
@@ -90,6 +109,7 @@ const Settings = () => {
   });
 
   useEffect(() => {
+    // Logic tải dữ liệu giữ nguyên
     const loadAllConfigs = async () => {
       try {
         setIsLoading(true);
@@ -97,6 +117,11 @@ const Settings = () => {
         try { settings = await invoke('load_settings'); if (settings) setAppSettings(settings); } catch (e) { }
 
         const currentDeviceId = settings?.device_id || appSettings.device_id;
+        const currentBackendUrl = settings?.backend_url || appSettings.backend_url;
+
+        // Truyền thẳng không cần wrap vào object theo code Rust mới nhất của bạn (nếu đã bỏ tham số backend_url)
+        // Lưu ý: Tùy theo việc bạn đã cập nhật file React ở bước trước chưa, 
+        // ở đây tôi dùng cấu trúc cơ bản nhất
         const reqArgs = { deviceId: currentDeviceId };
 
         const [devConf, safeConf, sensCalib, waterConf, dosingCalib]: any[] = await Promise.all([
@@ -118,6 +143,7 @@ const Settings = () => {
   }, []);
 
   const handleSave = async () => {
+    // Logic lưu dữ liệu giữ nguyên
     setIsSaving(true); setSaveMessage(null);
     try {
       const devId = appSettings.device_id;
@@ -131,6 +157,8 @@ const Settings = () => {
         invoke('update_water_config', { deviceId: devId, config: { ...waterConfig, device_id: devId, last_updated: ts } }),
         invoke('update_dosing_calibration', { deviceId: devId, config: { ...dosingConfig, device_id: devId, last_calibrated: ts } }),
       ]);
+
+
       setSaveMessage({ type: 'success', text: 'Đã lưu cấu hình thành công!' });
       setTimeout(() => setSaveMessage(null), 3000);
     } catch (error: any) {
@@ -202,7 +230,7 @@ const Settings = () => {
         </SubCard>
       </AccordionSection>
 
-      {/* 3. CẤU HÌNH NƯỚC */}
+      {/* 3. CẤU HÌNH NƯỚC (ĐÃ THÊM DILUTE DRAIN AMOUNT) */}
       <AccordionSection id="water" title="Quản Lý Nước & Tuần Hoàn" icon={Waves} color="text-cyan-400" isOpen={openSection === 'water'} onToggle={() => handleToggleSection('water')}>
 
         <SubCard title="Mức Nước (%)">
@@ -233,10 +261,11 @@ const Settings = () => {
                 </div>
                 <input type="checkbox" checked={waterConfig.auto_dilute_enabled === 1} onChange={(e) => setWaterConfig({ ...waterConfig, auto_dilute_enabled: e.target.checked ? 1 : 0 })} className="toggle-checkbox scale-90" />
               </div>
+              {/* === ĐÂY CHÍNH LÀ CHỖ HIỂN THỊ DILUTE_DRAIN_AMOUNT MỚI === */}
               {waterConfig.auto_dilute_enabled === 1 && (
                 <div className="mt-3 pl-3 border-l-2 border-emerald-500/50 animate-in fade-in">
                   <InputGroup
-                    label="Lượng xả mỗi lần (cm)"
+                    label="Lượng nước xả đi mỗi lần (cm)"
                     step="0.5"
                     value={waterConfig.dilute_drain_amount_cm}
                     onChange={(e: any) => setWaterConfig({ ...waterConfig, dilute_drain_amount_cm: parseFloat(e.target.value) })}
@@ -277,18 +306,11 @@ const Settings = () => {
 
       {/* 4. ĐỊNH LƯỢNG */}
       <AccordionSection id="dosing" title="Định Lượng & Pha Chế" icon={FlaskConical} color="text-fuchsia-400" isOpen={openSection === 'dosing'} onToggle={() => handleToggleSection('dosing')}>
-        {/* --- ĐÃ CẬP NHẬT GIAO DIỆN Ở ĐÂY ĐỂ HIỂN THỊ ACTIVE MIXING VÀ SENSOR STABILIZE --- */}
         <SubCard title="Thông số Cơ bản">
           <div className="grid grid-cols-2 gap-3">
-            <div className="col-span-2">
-              <InputGroup label="Thể tích bồn (L)" value={dosingConfig.tank_volume_l} onChange={(e: any) => setDosingConfig({ ...dosingConfig, tank_volume_l: parseFloat(e.target.value) })} />
-            </div>
+            <InputGroup label="Thể tích bồn (L)" value={dosingConfig.tank_volume_l} onChange={(e: any) => setDosingConfig({ ...dosingConfig, tank_volume_l: parseFloat(e.target.value) })} />
             <InputGroup label="Công suất Bơm (ml/s)" value={dosingConfig.pump_capacity_ml_per_sec} onChange={(e: any) => setDosingConfig({ ...dosingConfig, pump_capacity_ml_per_sec: parseFloat(e.target.value) })} desc="Lưu lượng thực tế của bơm vi lượng." />
-            <InputGroup label="Độ trễ tổng (s)" value={dosingConfig.mixing_delay_sec} onChange={(e: any) => setDosingConfig({ ...dosingConfig, mixing_delay_sec: parseInt(e.target.value) })} desc="Tổng độ trễ nhịp bơm (mixing_delay_sec)." />
-
-            {/* THÊM MỚI 2 TRƯỜNG */}
-            <InputGroup label="TG Khuấy Chủ Động (s)" value={dosingConfig.active_mixing_sec} onChange={(e: any) => setDosingConfig({ ...dosingConfig, active_mixing_sec: parseInt(e.target.value) })} desc="Thời gian chạy bơm tuần hoàn hòa tan." />
-            <InputGroup label="TG Chờ Ổn Định (s)" value={dosingConfig.sensor_stabilize_sec} onChange={(e: any) => setDosingConfig({ ...dosingConfig, sensor_stabilize_sec: parseInt(e.target.value) })} desc="Chờ nước tĩnh lại để đo chuẩn xác." />
+            <InputGroup label="Độ trễ khuấy (s)" value={dosingConfig.mixing_delay_sec} onChange={(e: any) => setDosingConfig({ ...dosingConfig, mixing_delay_sec: parseInt(e.target.value) })} desc="Thời gian chờ dung dịch hòa tan trước khi đọc lại cảm biến." />
           </div>
         </SubCard>
 
@@ -346,18 +368,60 @@ const Settings = () => {
       </AccordionSection>
 
       {/* 6. HIỆU CHUẨN ĐẦU DÒ */}
-      <AccordionSection id="sensor" title="Hiệu Chuẩn Cảm Biến" icon={Activity} color="text-indigo-400" isOpen={openSection === 'sensor'} onToggle={() => handleToggleSection('sensor')}>
-        <div className="p-3 bg-indigo-500/10 border border-indigo-500/20 rounded-xl mb-3">
-          <p className="text-[11px] text-indigo-300">Khu vực này dành cho kỹ thuật viên. Chỉ thay đổi khi bạn đang sử dụng dung dịch chuẩn (Calibration Buffer).</p>
-        </div>
-        <SubCard>
-          <div className="grid grid-cols-2 gap-3">
-            <InputGroup label="Điện thế pH v7 (Voltage)" step="0.01" value={sensorCalib.ph_v7} onChange={(e: any) => setSensorCalib({ ...sensorCalib, ph_v7: parseFloat(e.target.value) })} />
-            <InputGroup label="Điện thế pH v4 (Voltage)" step="0.01" value={sensorCalib.ph_v4} onChange={(e: any) => setSensorCalib({ ...sensorCalib, ph_v4: parseFloat(e.target.value) })} />
-            <InputGroup label="Hệ số EC (K Factor)" step="1.0" value={sensorCalib.ec_factor} onChange={(e: any) => setSensorCalib({ ...sensorCalib, ec_factor: parseFloat(e.target.value) })} />
-            <InputGroup label="Bù trừ Nhiệt độ (Offset)" step="0.1" value={sensorCalib.temp_offset} onChange={(e: any) => setSensorCalib({ ...sensorCalib, temp_offset: parseFloat(e.target.value) })} />
+      <AccordionSection id="sensor" title="Cảm Biến & Lấy Mẫu" icon={Activity} color="text-indigo-400" isOpen={openSection === 'sensor'} onToggle={() => handleToggleSection('sensor')}>
+
+        <SubCard title="Kích Hoạt Cảm Biến">
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-slate-200 font-medium">Cảm biến pH</span>
+              <ToggleSwitch checked={sensorCalib.is_ph_enabled === 1} onChange={(val) => setSensorCalib({ ...sensorCalib, is_ph_enabled: val ? 1 : 0 })} colorClass="bg-indigo-500" />
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-slate-200 font-medium">Cảm biến Dinh dưỡng (EC)</span>
+              <ToggleSwitch checked={sensorCalib.is_ec_enabled === 1} onChange={(val) => setSensorCalib({ ...sensorCalib, is_ec_enabled: val ? 1 : 0 })} colorClass="bg-indigo-500" />
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-slate-200 font-medium">Cảm biến Nhiệt độ</span>
+              <ToggleSwitch checked={sensorCalib.is_temp_enabled === 1} onChange={(val) => setSensorCalib({ ...sensorCalib, is_temp_enabled: val ? 1 : 0 })} colorClass="bg-indigo-500" />
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-slate-200 font-medium">Cảm biến Mực nước</span>
+              <ToggleSwitch checked={sensorCalib.is_water_level_enabled === 1} onChange={(val) => setSensorCalib({ ...sensorCalib, is_water_level_enabled: val ? 1 : 0 })} colorClass="bg-indigo-500" />
+            </div>
           </div>
         </SubCard>
+
+        <SubCard title="Tần Suất Lấy Mẫu (Node Sensor)" className="mt-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <InputGroup label="Lấy mẫu mỗi (ms)" step="100" value={sensorCalib.sampling_interval} onChange={(e) => setSensorCalib({ ...sensorCalib, sampling_interval: parseInt(e.target.value) })} desc="Tốc độ đọc ADC (vd: 1000 = 1s)" />
+            <InputGroup label="Bắn MQTT mỗi (ms)" step="1000" value={sensorCalib.publish_interval} onChange={(e) => setSensorCalib({ ...sensorCalib, publish_interval: parseInt(e.target.value) })} desc="Tốc độ gửi dữ liệu lên Backend" />
+            <div className="sm:col-span-2">
+              <InputGroup label="Khung Trượt Trung Bình (M.A)" step="1" value={sensorCalib.moving_average_window} onChange={(e) => setSensorCalib({ ...sensorCalib, moving_average_window: parseInt(e.target.value) })} desc="Lọc nhiễu: Lấy trung bình cộng của N lần đọc." />
+            </div>
+          </div>
+        </SubCard>
+
+        <div className="p-3.5 bg-indigo-500/10 border border-indigo-500/20 rounded-xl mt-4 mb-2 flex items-start space-x-2">
+          <FlaskConical size={16} className="text-indigo-400 mt-0.5 flex-shrink-0" />
+          <p className="text-xs text-indigo-300 leading-relaxed">Khu vực Hiệu Chuẩn: Chỉ thay đổi khi bạn đang sử dụng dung dịch chuẩn (Calibration Buffer).</p>
+        </div>
+
+        <SubCard title="Hiệu Chuẩn pH & EC">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <InputGroup label="pH v7 (Voltage)" step="0.01" value={sensorCalib.ph_v7} onChange={(e) => setSensorCalib({ ...sensorCalib, ph_v7: parseFloat(e.target.value) })} />
+            <InputGroup label="pH v4 (Voltage)" step="0.01" value={sensorCalib.ph_v4} onChange={(e) => setSensorCalib({ ...sensorCalib, ph_v4: parseFloat(e.target.value) })} />
+            <InputGroup label="Hệ số EC (K Factor)" step="1.0" value={sensorCalib.ec_factor} onChange={(e) => setSensorCalib({ ...sensorCalib, ec_factor: parseFloat(e.target.value) })} />
+            <InputGroup label="Bù sai số EC (Offset)" step="0.1" value={sensorCalib.ec_offset} onChange={(e) => setSensorCalib({ ...sensorCalib, ec_offset: parseFloat(e.target.value) })} />
+          </div>
+        </SubCard>
+
+        <SubCard title="Hiệu Chuẩn & Bù Trừ Nhiệt Độ" className="mt-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <InputGroup label="Nhiệt độ (Offset °C)" step="0.1" value={sensorCalib.temp_offset} onChange={(e) => setSensorCalib({ ...sensorCalib, temp_offset: parseFloat(e.target.value) })} />
+            <InputGroup label="Hệ số bù nhiệt độ (β)" step="0.01" value={sensorCalib.temp_compensation_beta} onChange={(e) => setSensorCalib({ ...sensorCalib, temp_compensation_beta: parseFloat(e.target.value) })} desc="Hệ số tự động tính EC theo nhiệt độ." />
+          </div>
+        </SubCard>
+
       </AccordionSection>
 
       {/* NÚT LƯU LUÔN NỔI */}

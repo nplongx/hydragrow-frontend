@@ -1,12 +1,14 @@
+// src/layouts/MainLayout.tsx (Hoặc đường dẫn tương ứng của bạn)
 import { Outlet, NavLink } from 'react-router-dom';
-import { LayoutDashboard, SlidersHorizontal, LineChart, Settings } from 'lucide-react';
+import { LayoutDashboard, SlidersHorizontal, LineChart, Settings, ShieldCheck } from 'lucide-react';
 
 const MainLayout = () => {
-  // Danh sách các tab điều hướng
+  // Danh sách các tab điều hướng (Đã thêm tab Blockchain)
   const navItems = [
     { path: '/', icon: LayoutDashboard, label: 'Tổng quan' },
     { path: '/control', icon: SlidersHorizontal, label: 'Điều khiển' },
     { path: '/analytics', icon: LineChart, label: 'Phân tích' },
+    { path: '/blockchain', icon: ShieldCheck, label: 'Niêm phong' }, // Thêm dòng này
     { path: '/settings', icon: Settings, label: 'Cài đặt' },
   ];
 
@@ -21,18 +23,18 @@ const MainLayout = () => {
 
       {/* Bottom Navigation Bar */}
       <nav className="fixed bottom-0 w-full bg-slate-900/80 backdrop-blur-lg border-t border-slate-800 pb-safe pb-[calc(8px+env(safe-area-inset-bottom))]">
-        <div className="flex justify-around items-center h-16 px-2">
+        <div className="flex justify-around items-center h-16 px-1"> {/* Đổi px-2 thành px-1 để 5 tab có thêm không gian */}
           {navItems.map((item) => (
             <NavLink
               key={item.path}
               to={item.path}
               className={({ isActive }) =>
-                `flex flex-col items-center justify-center w-16 space-y-1 transition-colors ${isActive ? 'text-emerald-400' : 'text-slate-400 hover:text-slate-200'
+                `flex flex-col items-center justify-center w-full space-y-1 transition-colors ${isActive ? 'text-indigo-400' : 'text-slate-400 hover:text-slate-200'
                 }`
               }
             >
-              <item.icon size={24} strokeWidth={2} />
-              <span className="text-[10px] font-medium">{item.label}</span>
+              <item.icon size={22} strokeWidth={2} /> {/* Thu nhỏ icon một xíu (từ 24 -> 22) để 5 tab nhìn thoáng hơn */}
+              <span className="text-[10px] font-medium truncate">{item.label}</span>
             </NavLink>
           ))}
         </div>
@@ -43,4 +45,3 @@ const MainLayout = () => {
 };
 
 export default MainLayout;
-

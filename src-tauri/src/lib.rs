@@ -32,6 +32,9 @@ pub fn run() {
             commands::get_latest_sensor_data,
             commands::get_sensor_history,
             commands::manual_pump,
+            commands::get_blockchain_history,
+            commands::verify_blockchain_tx,
+            commands::push_blockchain_log,
             // Tiện ích (Thông báo)
             notification::trigger_os_notification,
         ])

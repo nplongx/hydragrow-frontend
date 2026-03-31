@@ -5,6 +5,7 @@ import './App.css';
 import ControlPanel from './pages/ControlPanel';
 import Analytics from './pages/Analytics';
 import Settings from './pages/Settings';
+import BlockchainHistory from './pages/BlockchainHistory';
 // Import các page khác khi tạo xong...
 
 function App() {
@@ -16,6 +17,7 @@ function App() {
           <Route path="control" element={<ControlPanel />} />
           <Route path="analytics" element={<Analytics />} />
           <Route path="settings" element={<Settings />} />
+          <Route path="/blockchain" element={<BlockchainHistory />} />
         </Route>
       </Routes>
     </BrowserRouter>
