@@ -30,13 +30,48 @@ export function useDeviceControl(deviceId: string) {
   };
 
   // Chỉ giữ lại hàm điều khiển Bơm (Pump)
-  const togglePump = async (pump: string, action: 'on' | 'off', durationSec?: number) => {
-    return executeCommand('manual_pump', { pump, action, durationSec });
+  const togglePump = async (pumpId: string, action: string, pwm?: number) => { // 🟢 Thêm pwm?: number
+    try {
+      setIsProcessing(true);
+      await invoke('control_pump', {
+        deviceId,
+        pump: pumpId,
+        action,
+        durationSec: null,
+        pwm: pwm // 🟢 Truyền pwm xuống Tauri (nếu undefined, Tauri sẽ nhận là null/None)
+      });
+      return true;
+    } catch (err: any) {
+      setError(err);
+      return false;
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const setPumpPwm = async (pumpId: string, pwmValue: number) => {
+    try {
+      setIsProcessing(true);
+      await invoke('control_pump', {
+        deviceId,
+        pump: pumpId,
+        action: 'set_pwm',
+        durationSec: null,
+        pwm: pwmValue
+      });
+      return true;
+    } catch (err: any) {
+      setError(err);
+      return false;
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   return {
     isProcessing,
     error,
     togglePump,
+    setPumpPwm
   };
 }

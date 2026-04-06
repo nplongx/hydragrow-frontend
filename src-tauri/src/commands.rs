@@ -251,6 +251,7 @@ pub struct PumpControlPayload {
     pub pump: String,
     pub action: String,
     pub duration_sec: Option<u64>,
+    pub pwm: Option<u32>, // 🟢 Bổ sung trường pwm
 }
 
 #[tauri::command]
@@ -260,12 +261,14 @@ pub async fn control_pump(
     pump: String,
     action: String,
     duration_sec: Option<u64>,
+    pwm: Option<u32>, // 🟢 Bổ sung tham số pwm
 ) -> Result<Value, String> {
     let path = format!("/api/devices/{}/control", device_id);
     let payload = PumpControlPayload {
         pump,
         action,
         duration_sec,
+        pwm, // 🟢 Đẩy vào payload
     };
     post(&app, &path, &payload).await
 }
@@ -335,13 +338,14 @@ pub async fn manual_pump(
     pump: String,
     action: String,
     duration_sec: Option<u64>,
+    pwm: Option<u32>, // 🟢 Bổ sung tham số pwm
 ) -> Result<Value, String> {
-    // Tái sử dụng struct PumpControlPayload đã khai báo ở phần 7
     let path = format!("/api/devices/{}/control", device_id);
     let payload = PumpControlPayload {
         pump,
         action,
         duration_sec,
+        pwm, // 🟢 Đẩy vào payload
     };
 
     post(&app, &path, &payload).await
