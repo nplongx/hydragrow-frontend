@@ -11,6 +11,7 @@ import {
   ResponsiveContainer
 } from 'recharts';
 import { SensorData } from '../types/models';
+import { listen } from '@tauri-apps/api/event';
 
 const DEVICE_ID = "device_001";
 
@@ -25,8 +26,10 @@ const Analytics = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isExporting, setIsExporting] = useState(false);
 
-  // Lấy dữ liệu 24h
+  // Lấy dữ liệu 24h VÀ lắng nghe Realtime
   useEffect(() => {
+    let unlistenSensorUpdate: Promise<() => void>; // Biến dọn dẹp listener
+
     const fetchHistory = async () => {
       try {
         setIsLoading(true);
@@ -44,11 +47,9 @@ const Analytics = () => {
           }
         );
 
-        console.log("Dữ liệu thô từ Rust:", JSON.stringify(response, null, 2));
-
-        const formattedData = response.data.map((d) => ({
+        const formattedData = response.data.map((d: SensorData) => ({
           ...d,
-          formattedTime: new Date(d.timestamp).toLocaleTimeString('vi-VN', {
+          formattedTime: new Date(d.time).toLocaleTimeString('vi-VN', {
             hour: '2-digit',
             minute: '2-digit'
           })
@@ -63,7 +64,53 @@ const Analytics = () => {
       }
     };
 
+    const setupRealtime = async () => {
+      unlistenSensorUpdate = listen<any>('sensor_update', (event) => {
+        // 🟢 Thêm dòng này để nhìn thấy data từ Backend bắn về
+        console.log("🔥 Tín hiệu Realtime ập đến:", event.payload);
+
+        const newData = event.payload.data ? event.payload.data : event.payload;
+
+        if (newData.device_id !== DEVICE_ID) return;
+
+        const newFormattedData = {
+          ...newData,
+          formattedTime: new Date(newData.time).toLocaleTimeString('vi-VN', {
+            hour: '2-digit',
+            minute: '2-digit'
+          })
+        };
+
+        setHistoryData((prevData) => {
+          if (prevData.length > 0 && prevData[prevData.length - 1].time === newData.time) {
+            return prevData; // Bỏ qua trùng lặp
+          }
+
+          // 🟢 Thêm dòng này để thấy Chart được nạp đạn
+          console.log("📈 Cập nhật điểm mới lên biểu đồ:", newFormattedData);
+
+          const updated = [...prevData, newFormattedData];
+          return updated.slice(-100);
+        });
+      });
+
+      try {
+        await invoke('start_ws_listener', { deviceId: DEVICE_ID });
+      } catch (error) {
+        console.error("Lỗi khi gọi Rust start WebSocket:", error);
+      }
+    };
+
+    // Gọi 2 hàm
     fetchHistory();
+    setupRealtime();
+
+    // Dọn dẹp listener khi component bị hủy (chuyển trang)
+    return () => {
+      if (unlistenSensorUpdate) {
+        unlistenSensorUpdate.then(unlisten => unlisten());
+      }
+    };
   }, []);
 
   // Export CSV
