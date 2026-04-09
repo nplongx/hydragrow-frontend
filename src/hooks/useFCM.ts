@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
-import { messaging } from '../firebase.ts';
 import { getToken, onMessage } from 'firebase/messaging';
 import toast from 'react-hot-toast';
+import { messaging } from '../firebase';
 
 export function useFCM() {
   useEffect(() => {
