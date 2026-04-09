@@ -9,42 +9,17 @@ pub struct AppSettings {
     pub device_id: String,
 }
 
-// ── Enums (Map chuẩn với Backend ESP32/MQTT) ─────────────────────────
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-#[serde(rename_all = "lowercase")]
-pub enum DeviceState {
-    On,
-    #[default]
-    Off,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-#[serde(rename_all = "lowercase")]
-pub enum ValveState {
-    Open,
-    #[default]
-    Closed,
-}
-
 // ── Sensor & Relay Data ──────────────────────────────────────────────
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct PumpStatus {
-    #[serde(rename = "A")]
-    pub a: DeviceState,
-    #[serde(rename = "B")]
-    pub b: DeviceState,
-    #[serde(rename = "PH_UP")]
-    pub ph_up: DeviceState,
-    #[serde(rename = "PH_DOWN")]
-    pub ph_down: DeviceState,
-    #[serde(rename = "CIRCULATION")]
-    pub circulation: DeviceState,
-    #[serde(rename = "WATER_PUMP")]
-    pub water_pump: DeviceState,
-    #[serde(rename = "VAN_IN")]
-    pub van_in: ValveState,
-    #[serde(rename = "VAN_OUT")]
-    pub van_out: ValveState,
+    pub pump_a: bool,
+    pub pump_b: bool,
+    pub ph_up: bool,
+    pub ph_down: bool,
+    pub osaka_pump: bool,
+    pub mist_valve: bool,
+    pub water_pump_in: bool,
+    pub water_pump_out: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -55,7 +30,8 @@ pub struct SensorData {
     pub temp_value: f64,
     pub water_level: f64,
     pub pump_status: PumpStatus,
-    pub timestamp: String,
+    // 🟢 ĐÃ SỬA: Đổi `timestamp` thành `time` để khớp với JSON Backend trả về
+    pub time: String,
 }
 
 // ── Configurations (DB Entities) ─────────────────────────────────────
@@ -202,13 +178,6 @@ pub struct Esp32AggregatedConfig {
     // Đã thêm 2 trường từ state.rs
     pub active_mixing_sec: i64,
     pub sensor_stabilize_sec: i64,
-}
-
-// ── API Requests ─────────────────────────────────────────────────────
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ValveCommandReq {
-    pub valve: String,
-    pub action: ValveState,
 }
 
 // ── WebSocket Payloads (Gửi sang React UI) ───────────────────────────

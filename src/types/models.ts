@@ -1,66 +1,61 @@
 // src/types/models.ts
 
-// Bạn có thể giữ lại DeviceState nếu vẫn dùng cho các UI Component khác (VD: Nút bấm)
+/**
+ * Trạng thái hoạt động cơ bản của thiết bị
+ */
 export type DeviceState = 'on' | 'off';
 
 /**
- * Trạng thái hoạt động của bơm (Đọc từ MQTT Telemetry)
- * Khớp 100% với struct PumpStatus của ESP32 (Trả về boolean và snake_case)
+ * Trạng thái chi tiết của tất cả các máy bơm và van trong hệ thống
  */
 export interface PumpStatus {
-  pump_a: boolean;
-  pump_b: boolean;
-  ph_up: boolean;
-  ph_down: boolean;
-  osaka_pump: boolean;
-  water_pump_in: boolean;  // Thay cho WATER_PUMP cũ
-  water_pump_out: boolean; // Thay cho DRAIN_PUMP cũ
+  A: DeviceState;          // Bơm dinh dưỡng A
+  B: DeviceState;          // Bơm dinh dưỡng B
+  PH_UP: DeviceState;      // Bơm tăng pH
+  PH_DOWN: DeviceState;    // Bơm giảm pH
+  OSAKA_PUMP: DeviceState; // Bơm trộn/phun sương chính (Osaka)
+  MIST_VALVE: DeviceState; // Van điện từ phun sương
+  WATER_PUMP: DeviceState; // Bơm cấp nước vào (In)
+  DRAIN_PUMP: DeviceState; // Bơm thoát nước ra (Out)
 }
 
 /**
- * Dữ liệu thời gian thực từ trạm cảm biến
+ * Dữ liệu thu thập từ các cảm biến của thiết bị
  */
 export interface SensorData {
   device_id: string;
-  ec_value: number;
-  ph_value: number;
-  temp_value: number;
-  water_level: number;
-  pump_status: PumpStatus;
+  ec_value: number;        // Giá trị EC (Độ dẫn điện)
+  ph_value: number;        // Giá trị pH
+  temp_value: number;      // Nhiệt độ nước/môi trường
+  water_level: number;     // Mực nước (cm)
+  pump_status: PumpStatus; // Trạng thái bơm đồng bộ từ FSM
+  time: string;       // Thời gian ghi nhận dữ liệu
+}
+
+/**
+ * Cấu trúc thông báo cảnh báo hệ thống
+ */
+export interface AlertPayload {
+  id: string;
+  metric: string;          // Chỉ số gây ra lỗi (ví dụ: "EC", "WaterLevel")
+  value: number;           // Giá trị tại thời điểm xảy ra lỗi
+  severity: 'info' | 'warning' | 'critical';
+  message: string;         // Nội dung cảnh báo chi tiết
   timestamp: string;
 }
 
 /**
- * Payload dùng để gọi API điều khiển thiết bị (POST /api/devices/{id}/control)
- * Type này giúp bạn gõ code không bao giờ sợ sai tên bơm hay sai lệnh action
+ * Trạng thái kết nối của thiết bị với Server/Broker
  */
-export interface PumpControlReq {
-  pump:
-  | 'A'
-  | 'B'
-  | 'PH_UP'
-  | 'PH_DOWN'
-  | 'OSAKA_PUMP'
-  | 'WATER_PUMP'       // Cấp nước
-  | 'DRAIN_PUMP'       // Xả nước
-  | 'CIRCULATION_PUMP' // Bơm tuần hoàn 220V qua Tuya Cloud
-  | 'ALL';             // Dành cho lệnh reset hệ thống
-
-  action: 'on' | 'off' | 'reset_fault' | 'set_pwm';
-  duration_sec?: number; // Số giây chạy (Tuỳ chọn)
-  pwm?: number;          // % Tốc độ bơm từ 0-100 (Tuỳ chọn)
-}
-
-export interface AlertPayload {
-  id: string;
-  metric: string;
-  value: number;
-  severity: 'info' | 'warning' | 'critical';
-  message: string;
-  timestamp: string;
-}
-
 export interface StatusPayload {
-  is_online: boolean;
-  last_seen: string;
+  is_online: boolean;      // Thiết bị có đang kết nối MQTT không
+  last_seen: string;       // Lần cuối cùng nhận được tín hiệu (Heartbeat)
+}
+
+/**
+ * Trạng thái máy trạng thái (FSM) gửi từ Controller
+ */
+export interface FsmStatePayload {
+  current_state: string;   // Ví dụ: "Monitoring", "DosingEC", "EmergencyStop"
+  timestamp: string;
 }
