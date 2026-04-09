@@ -33,14 +33,15 @@ export function useDeviceControl(deviceId: string) {
     return await res.json();
   };
 
-  const togglePump = async (pumpId: string, action: string, pwm?: number) => {
+  // 🟢 Bổ sung thêm tham số duration_sec
+  const togglePump = async (pumpId: string, action: string, pwm?: number, duration_sec?: number) => {
     try {
       setIsProcessing(true);
       setError(null);
       await callControlApi({
         pump: pumpId,
         action: action,
-        duration_sec: null, // Đổi thành snake_case để Actix đọc được
+        duration_sec: duration_sec || null, // Truyền thời gian hẹn giờ tắt xuống Actix
         pwm: pwm || null
       });
       return true;

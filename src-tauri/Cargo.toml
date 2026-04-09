@@ -30,4 +30,4 @@ tokio-tungstenite = { version = "0.28.0", features = [
 futures-util = "0.3.32"
 tokio = "1.50.0"
 chrono = "0.4.44"
-tauri-plugin-notification = "2.3.3"
+tauri-plugin-notification = "2"
