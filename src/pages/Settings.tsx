@@ -1,4 +1,5 @@
 // src/pages/Settings.tsx
+import React from 'react';
 import { useState, useEffect } from 'react';
 import {
   Save, Target, ShieldAlert, Waves,
@@ -12,6 +13,8 @@ interface ToggleSwitchProps {
   onChange: (checked: boolean) => void;
   colorClass?: string;
 }
+
+type InputEvent = React.ChangeEvent<HTMLInputElement>;
 
 // --- COMPONENTS PHỤ ---
 
@@ -49,7 +52,7 @@ const ToggleSwitch = ({ checked, onChange, colorClass = "bg-emerald-500" }: Togg
   </button>
 );
 
-const AccordionSection = ({ id, title, icon: Icon, color, children, isOpen, onToggle }: any) => {
+const AccordionSection = ({ title, icon: Icon, color, children, isOpen, onToggle }: any) => {
   return (
     <section className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden transition-all duration-300">
       <button onClick={onToggle} className="w-full flex items-center justify-between p-4 hover:bg-slate-800/50 active:bg-slate-800 transition-colors">
@@ -422,10 +425,10 @@ const Settings = () => {
 
         <SubCard title="Tần Suất Lấy Mẫu (Node Sensor)" className="mt-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <InputGroup label="Lấy mẫu mỗi (ms)" step="100" value={sensorCalib.sampling_interval} onChange={(e) => setSensorCalib({ ...sensorCalib, sampling_interval: parseInt(e.target.value) })} desc="Tốc độ đọc ADC (vd: 1000 = 1s)" />
-            <InputGroup label="Bắn MQTT mỗi (ms)" step="1000" value={sensorCalib.publish_interval} onChange={(e) => setSensorCalib({ ...sensorCalib, publish_interval: parseInt(e.target.value) })} desc="Tốc độ gửi dữ liệu lên Backend" />
+            <InputGroup label="Lấy mẫu mỗi (ms)" step="100" value={sensorCalib.sampling_interval} onChange={(e: InputEvent) => setSensorCalib({ ...sensorCalib, sampling_interval: parseInt(e.target.value) })} desc="Tốc độ đọc ADC (vd: 1000 = 1s)" />
+            <InputGroup label="Bắn MQTT mỗi (ms)" step="1000" value={sensorCalib.publish_interval} onChange={(e: InputEvent) => setSensorCalib({ ...sensorCalib, publish_interval: parseInt(e.target.value) })} desc="Tốc độ gửi dữ liệu lên Backend" />
             <div className="sm:col-span-2">
-              <InputGroup label="Khung Trượt Trung Bình (M.A)" step="1" value={sensorCalib.moving_average_window} onChange={(e) => setSensorCalib({ ...sensorCalib, moving_average_window: parseInt(e.target.value) })} desc="Lọc nhiễu: Lấy trung bình cộng của N lần đọc." />
+              <InputGroup label="Khung Trượt Trung Bình (M.A)" step="1" value={sensorCalib.moving_average_window} onChange={(e: InputEvent) => setSensorCalib({ ...sensorCalib, moving_average_window: parseInt(e.target.value) })} desc="Lọc nhiễu: Lấy trung bình cộng của N lần đọc." />
             </div>
           </div>
         </SubCard>
@@ -437,17 +440,17 @@ const Settings = () => {
 
         <SubCard title="Hiệu Chuẩn pH & EC">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <InputGroup label="pH v7 (Voltage)" step="0.01" value={sensorCalib.ph_v7} onChange={(e) => setSensorCalib({ ...sensorCalib, ph_v7: parseFloat(e.target.value) })} />
-            <InputGroup label="pH v4 (Voltage)" step="0.01" value={sensorCalib.ph_v4} onChange={(e) => setSensorCalib({ ...sensorCalib, ph_v4: parseFloat(e.target.value) })} />
-            <InputGroup label="Hệ số EC (K Factor)" step="1.0" value={sensorCalib.ec_factor} onChange={(e) => setSensorCalib({ ...sensorCalib, ec_factor: parseFloat(e.target.value) })} />
-            <InputGroup label="Bù sai số EC (Offset)" step="0.1" value={sensorCalib.ec_offset} onChange={(e) => setSensorCalib({ ...sensorCalib, ec_offset: parseFloat(e.target.value) })} />
+            <InputGroup label="pH v7 (Voltage)" step="0.01" value={sensorCalib.ph_v7} onChange={(e: InputEvent) => setSensorCalib({ ...sensorCalib, ph_v7: parseFloat(e.target.value) })} />
+            <InputGroup label="pH v4 (Voltage)" step="0.01" value={sensorCalib.ph_v4} onChange={(e: InputEvent) => setSensorCalib({ ...sensorCalib, ph_v4: parseFloat(e.target.value) })} />
+            <InputGroup label="Hệ số EC (K Factor)" step="1.0" value={sensorCalib.ec_factor} onChange={(e: InputEvent) => setSensorCalib({ ...sensorCalib, ec_factor: parseFloat(e.target.value) })} />
+            <InputGroup label="Bù sai số EC (Offset)" step="0.1" value={sensorCalib.ec_offset} onChange={(e: InputEvent) => setSensorCalib({ ...sensorCalib, ec_offset: parseFloat(e.target.value) })} />
           </div>
         </SubCard>
 
         <SubCard title="Hiệu Chuẩn & Bù Trừ Nhiệt Độ" className="mt-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <InputGroup label="Nhiệt độ (Offset °C)" step="0.1" value={sensorCalib.temp_offset} onChange={(e) => setSensorCalib({ ...sensorCalib, temp_offset: parseFloat(e.target.value) })} />
-            <InputGroup label="Hệ số bù nhiệt độ (β)" step="0.01" value={sensorCalib.temp_compensation_beta} onChange={(e) => setSensorCalib({ ...sensorCalib, temp_compensation_beta: parseFloat(e.target.value) })} desc="Hệ số tự động tính EC theo nhiệt độ." />
+            <InputGroup label="Nhiệt độ (Offset °C)" step="0.1" value={sensorCalib.temp_offset} onChange={(e: InputEvent) => setSensorCalib({ ...sensorCalib, temp_offset: parseFloat(e.target.value) })} />
+            <InputGroup label="Hệ số bù nhiệt độ (β)" step="0.01" value={sensorCalib.temp_compensation_beta} onChange={(e: InputEvent) => setSensorCalib({ ...sensorCalib, temp_compensation_beta: parseFloat(e.target.value) })} desc="Hệ số tự động tính EC theo nhiệt độ." />
           </div>
         </SubCard>
 
