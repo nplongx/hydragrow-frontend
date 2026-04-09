@@ -1,54 +1,41 @@
+// src/hooks/useFCM.ts
 import { useEffect } from 'react';
-import { getToken, onMessage } from 'firebase/messaging';
-import toast from 'react-hot-toast';
-import { messaging } from '../firebase';
 
 export function useFCM() {
   useEffect(() => {
-    const setupFCM = async () => {
+    // Hàm gửi Token lên Actix Backend
+    const sendTokenToBackend = async (token: string) => {
+      console.log('📱 Nhận được FCM Token TỪ KOTLIN:', token);
       try {
-        // 1. Xin quyền hiển thị thông báo
-        const permission = await Notification.requestPermission();
-        if (permission === 'granted') {
-          console.log('✅ Đã được cấp quyền Notification');
-
-          // 2. Lấy FCM Token (Thay VAPID_KEY bằng key trong Firebase Console của bạn)
-          const currentToken = await getToken(messaging, {
-            vapidKey: 'BDHacUd3ZPRTo5QfnaErWYyXIgxW2sjOR22A9HrIyLzuPrJ62cylLTgaooS3PhscRnZ6jggodBFmd3hJ3izr33I'
-          });
-
-          if (currentToken) {
-            console.log('📱 FCM Token của máy này:', currentToken);
-
-            // 3. 🟢 GỬI TOKEN LÊN BACKEND RUST CỦA BẠN
-            await fetch('https://hydragrow-backend.onrender.com/api/notifications/register', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ fcm_token: currentToken })
-            });
-
-          } else {
-            console.log('Không lấy được Token, hãy kiểm tra lại cấu hình.');
-          }
-        }
-      } catch (error) {
-        console.error('Lỗi khởi tạo FCM:', error);
+        await fetch('https://hydragrow-backend.onrender.com/api/notifications/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fcm_token: token })
+        });
+        console.log('✅ Đã đăng ký Token lên Backend thành công!');
+      } catch (e) {
+        console.error('❌ Lỗi gửi token lên Backend:', e);
       }
     };
 
-    setupFCM();
+    // 1. Bắt trường hợp Kotlin chạy chậm hơn React (Bắt qua Event)
+    const handleNativeToken = (e: any) => {
+      sendTokenToBackend(e.detail);
+    };
+    window.addEventListener('on_fcm_token', handleNativeToken);
 
-    // 4. Xử lý Notification khi App ĐANG MỞ (Foreground)
-    const unsubscribe = onMessage(messaging, (payload) => {
-      console.log('Nhận được thông báo khi đang mở App:', payload);
-      toast.error(`${payload.notification?.title}\n${payload.notification?.body}`, {
-        duration: 10000,
-        style: { background: '#7f1d1d', color: '#fff' }
-      });
-    });
+    // 2. Bắt trường hợp Kotlin chạy nhanh hơn React (Token đã nằm sẵn trong window)
+    if ((window as any).NATIVE_FCM_TOKEN) {
+      sendTokenToBackend((window as any).NATIVE_FCM_TOKEN);
+    }
+
+    // Xin quyền hiển thị thông báo (Android 13+)
+    if (Notification.permission !== 'granted') {
+      Notification.requestPermission();
+    }
 
     return () => {
-      unsubscribe();
+      window.removeEventListener('on_fcm_token', handleNativeToken);
     };
   }, []);
 }
