@@ -1,72 +1,81 @@
 // src/hooks/useDeviceSensor.ts
 import { useState, useEffect, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { listen } from '@tauri-apps/api/event';
-import { fetch } from '@tauri-apps/plugin-http'; // <--- Import Native HTTP
-import { SensorData, AlertPayload, StatusPayload } from '../types/models';
+import { fetch } from '@tauri-apps/plugin-http';
+import { SensorData, StatusPayload } from '../types/models';
 
 export function useDeviceSensor(deviceId: string) {
   const [sensorData, setSensorData] = useState<SensorData | null>(null);
   const [deviceStatus, setDeviceStatus] = useState<StatusPayload>({ is_online: false, last_seen: '' });
-  const [alerts, setAlerts] = useState<AlertPayload[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     if (!deviceId) return;
-
-    let sensorPromise: Promise<() => void>;
-    let statusPromise: Promise<() => void>;
-    let alertPromise: Promise<() => void>;
+    let ws: WebSocket;
 
     const setup = async () => {
       try {
-        // Lấy cấu hình mạng để gọi API
+        // Lấy cấu hình mạng
         const settings: any = await invoke('load_settings').catch(() => null);
+        if (!settings || !settings.backend_url) {
+          setIsLoading(false);
+          return;
+        }
 
-        // 1. LẤY DATA KHỞI TẠO BẰNG HTTP FETCH (Thay cho invoke cũ)
-        if (settings && settings.backend_url) {
-          try {
-            const url = `${settings.backend_url}/api/devices/${deviceId}/sensors/latest`;
-            const response = await fetch(url, {
-              method: 'GET',
-              headers: {
-                'Content-Type': 'application/json',
-                'X-API-Key': settings.api_key
-              }
-            });
-
-            if (response.ok) {
-              const resData = await response.json();
-              // Bóc vỏ JSON y hệt logic cũ của bạn
-              const actualInitialData = resData.data ? resData.data : resData;
-              setSensorData(actualInitialData);
+        // 1. LẤY DATA KHỞI TẠO BẰNG HTTP FETCH
+        try {
+          const url = `${settings.backend_url}/api/devices/${deviceId}/sensors/latest`;
+          const response = await fetch(url, {
+            method: 'GET',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-API-Key': settings.api_key
             }
-          } catch (fetchErr) {
-            console.warn("Chưa lấy được data sensor mới nhất:", fetchErr);
+          });
+
+          if (response.ok) {
+            const resData = await response.json();
+            const actualInitialData = resData.data ? resData.data : resData;
+            setSensorData(actualInitialData);
           }
+        } catch (fetchErr) {
+          console.warn("Chưa lấy được data sensor mới nhất:", fetchErr);
         }
         setIsLoading(false);
 
-        // 2. LẮNG NGHE WEBSOCKET TỪ RUST (Giữ nguyên)
-        sensorPromise = listen<any>('sensor_update', (event) => {
-          const actualEventData = event.payload.data ? event.payload.data : event.payload;
-          setSensorData(actualEventData);
-        });
+        // 2. KẾT NỐI WEBSOCKET TRỰC TIẾP TRONG REACT (Bỏ qua Tauri IPC)
+        const wsUrl = settings.backend_url.replace(/^http/, 'ws') + '/ws';
+        ws = new WebSocket(wsUrl);
 
-        statusPromise = listen<StatusPayload>('device_status', (event) => {
-          console.log("🟢 Nhận được trạng thái từ Rust:", JSON.stringify(event.payload));
-          setDeviceStatus(event.payload);
-        });
+        ws.onopen = () => {
+          console.log('🟢 [SensorHook] Đã kết nối WebSocket lấy dữ liệu trực tiếp');
+        };
 
-        alertPromise = listen<AlertPayload>('alert', (event) => {
-          setAlerts((prev) => [event.payload, ...prev].slice(0, 10));
-        });
+        ws.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data);
 
-        // Đợi tất cả listener đăng ký xong xuôi...
-        await Promise.all([sensorPromise, statusPromise, alertPromise]);
+            // 🟢 LỌC BẢN TIN: Bỏ qua các bản tin không phải của Sensor
+            if (data.type === 'alert' || data.type === 'blockchain_verified') {
+              return; // Để hook useSystemAlerts tự xử lý
+            }
 
-        // 3. RỒI MỚI BẢO RUST KHỞI ĐỘNG WEBSOCKET LISTENER
-        await invoke('start_ws_listener', { deviceId });
+            if (data.type === 'sensor_update') {
+              const actualEventData = data.payload.data ? data.payload.data : data.payload;
+              setSensorData(actualEventData);
+            }
+            else if (data.type === 'device_status') {
+              console.log("🟢 Nhận được trạng thái thiết bị:", data);
+              setDeviceStatus({ is_online: data.online, last_seen: '' });
+            }
+          } catch (err) {
+            console.error("Lỗi parse WS Message trong SensorHook:", err);
+          }
+        };
+
+        ws.onclose = () => {
+          console.log('🔴 [SensorHook] Mất kết nối WebSocket');
+        };
 
       } catch (error) {
         console.error("Lỗi khởi tạo sensor:", error);
@@ -76,14 +85,15 @@ export function useDeviceSensor(deviceId: string) {
 
     setup();
 
-    // 4. Cleanup
+    // 3. CLEANUP: Đóng kết nối khi rời khỏi trang ControlPanel
     return () => {
-      if (sensorPromise) sensorPromise.then(unlisten => unlisten());
-      if (statusPromise) statusPromise.then(unlisten => unlisten());
-      if (alertPromise) alertPromise.then(unlisten => unlisten());
+      if (ws) {
+        ws.close();
+      }
     };
   }, [deviceId]);
 
+  // Hàm cập nhật state ngay lập tức cho UI mượt mà (Optimistic UI)
   const updatePumpStatusOptimistically = useCallback((pumpId: string, action: 'on' | 'off') => {
     setSensorData(prevData => {
       if (!prevData) return prevData;
@@ -97,5 +107,5 @@ export function useDeviceSensor(deviceId: string) {
     });
   }, []);
 
-  return { sensorData, deviceStatus, alerts, isLoading, updatePumpStatusOptimistically };
+  return { sensorData, deviceStatus, isLoading, updatePumpStatusOptimistically };
 }
