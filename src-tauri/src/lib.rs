@@ -17,7 +17,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::save_settings,
             commands::load_settings,
-            commands::start_ws_listener,
+            // commands::start_ws_listener,
             // Tiện ích (Thông báo)
             notification::trigger_os_notification,
         ])

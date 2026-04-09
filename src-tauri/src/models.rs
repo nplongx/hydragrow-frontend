@@ -183,12 +183,11 @@ pub struct Esp32AggregatedConfig {
 // ── WebSocket Payloads (Gửi sang React UI) ───────────────────────────
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct AlertPayload {
-    pub id: String,
-    pub metric: String,
-    pub value: f64,
-    pub severity: String, // "info" | "warning" | "critical"
+    pub device_id: String,
+    pub level: String, // "info" | "warning" | "critical" | "success"
+    pub title: String,
     pub message: String,
-    pub timestamp: String,
+    pub timestamp: u64,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

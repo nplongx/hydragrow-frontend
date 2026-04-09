@@ -57,10 +57,9 @@ pub async fn load_settings(app: AppHandle) -> Result<AppSettings, String> {
     get_settings(&app)
 }
 
-#[tauri::command]
-pub async fn start_ws_listener(app: AppHandle, device_id: String) -> Result<(), String> {
-    // Chạy background task, không block luồng chính
-    ws_client::start_ws_listener(app, device_id).await;
-    Ok(())
-}
-
+// #[tauri::command]
+// pub async fn start_ws_listener(app: AppHandle, device_id: String) -> Result<(), String> {
+//     // Chạy background task, không block luồng chính
+//     ws_client::start_ws_listener(app, device_id).await;
+//     Ok(())
+// }
