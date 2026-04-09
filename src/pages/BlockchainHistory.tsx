@@ -1,6 +1,7 @@
 // src/pages/BlockchainHistory.tsx
 import { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { fetch } from '@tauri-apps/plugin-http'; // <--- Import Native HTTP
 import { ShieldCheck, Clock, ExternalLink, Box, Server, AlertTriangle } from 'lucide-react';
 
 const DEVICE_ID = "device_001"; // Hardcode tạm cho demo
@@ -10,7 +11,7 @@ interface BlockchainRecord {
   device_id: string;
   action: string;
   tx_id: string;
-  created_at: string; // Hoặc timestamp tùy vào schema SQLite của bạn
+  created_at: string;
 }
 
 const BlockchainHistory = () => {
@@ -26,13 +27,30 @@ const BlockchainHistory = () => {
     setIsLoading(true);
     setError(null);
     try {
-      const response = await invoke<any>('get_blockchain_history', { deviceId: DEVICE_ID });
-      // Bóc vỏ data giống như kinh nghiệm lần trước
-      const actualData = response.data ? response.data : response;
+      // Lấy cấu hình máy chủ từ Store
+      const settings: any = await invoke('load_settings').catch(() => null);
+      if (!settings || !settings.backend_url) {
+        throw new Error("Chưa cấu hình URL máy chủ. Vui lòng vào Cài đặt.");
+      }
+
+      const url = `${settings.backend_url}/api/blockchain/devices/${DEVICE_ID}`;
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-API-Key': settings.api_key
+        }
+      });
+
+      if (!response.ok) throw new Error(`Lỗi máy chủ: HTTP ${response.status}`);
+
+      const resData = await response.json();
+      // Bóc vỏ data 
+      const actualData = resData.data ? resData.data : resData;
       setHistory(actualData);
-    } catch (err) {
+    } catch (err: any) {
       console.error("Lỗi tải lịch sử blockchain:", err);
-      setError(typeof err === 'string' ? err : "Không thể tải dữ liệu");
+      setError(err.message || (typeof err === 'string' ? err : "Không thể tải dữ liệu"));
     } finally {
       setIsLoading(false);
     }
@@ -40,13 +58,27 @@ const BlockchainHistory = () => {
 
   const handleVerify = async (txId: string) => {
     try {
-      const response = await invoke<any>('verify_blockchain_tx', { txId });
-      const data = response.data ? response.data : response;
+      const settings: any = await invoke('load_settings').catch(() => null);
+      if (!settings || !settings.backend_url) throw new Error("Missing config");
+
+      const url = `${settings.backend_url}/api/blockchain/verify/${txId}`;
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-API-Key': settings.api_key
+        }
+      });
+
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+      const resData = await response.json();
+      const data = resData.data ? resData.data : resData;
+
       // Mở trình duyệt web của OS để xem trên Solscan
-      // Nếu có cài plugin tauri shell thì xài, không thì dùng window.open
       window.open(data.verification_links.solscan, '_blank');
-    } catch (err) {
-      alert("Lỗi khi lấy link xác thực: " + err);
+    } catch (err: any) {
+      alert("Lỗi khi lấy link xác thực: " + (err.message || err));
     }
   };
 

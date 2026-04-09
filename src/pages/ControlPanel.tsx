@@ -8,7 +8,7 @@ const DEVICE_ID = "device_001"; // Hardcode cho demo
 
 const ControlPanel = () => {
   const { sensorData, deviceStatus, isLoading, updatePumpStatusOptimistically } = useDeviceSensor(DEVICE_ID);
-  const { isProcessing, error, togglePump, setPumpPwm } = useDeviceControl(DEVICE_ID);
+  const { isProcessing, togglePump, setPumpPwm } = useDeviceControl(DEVICE_ID);
 
   // Local state để quản lý giá trị PWM mượt mà trên UI trước khi commit qua API
   const [pwmValues, setPwmValues] = useState<Record<string, number>>({
