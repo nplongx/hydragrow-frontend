@@ -14,7 +14,7 @@ export function useFCM() {
 
           // 2. Lấy FCM Token (Thay VAPID_KEY bằng key trong Firebase Console của bạn)
           const currentToken = await getToken(messaging, {
-            vapidKey: 'BDHacUd3ZPRTo5QfnaErWYyXIgxW2sjOR22A9HrIyLzuPrJ62cylLTgaooS3PhscRnZ6jggodBFmd3hJ3izr33I '
+            vapidKey: 'BDHacUd3ZPRTo5QfnaErWYyXIgxW2sjOR22A9HrIyLzuPrJ62cylLTgaooS3PhscRnZ6jggodBFmd3hJ3izr33I'
           });
 
           if (currentToken) {
