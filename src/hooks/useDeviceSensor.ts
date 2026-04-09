@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
+import { fetch } from '@tauri-apps/plugin-http'; // <--- Import Native HTTP
 import { SensorData, AlertPayload, StatusPayload } from '../types/models';
 
 export function useDeviceSensor(deviceId: string) {
@@ -13,29 +14,47 @@ export function useDeviceSensor(deviceId: string) {
   useEffect(() => {
     if (!deviceId) return;
 
-    // Khai báo các biến lưu trữ Promise của hàm listen
     let sensorPromise: Promise<() => void>;
     let statusPromise: Promise<() => void>;
     let alertPromise: Promise<() => void>;
 
     const setup = async () => {
       try {
-        // 1. Lấy data mới nhất để hiển thị ngay lập tức
-        const response = await invoke<any>('get_latest_sensor_data', { deviceId });
+        // Lấy cấu hình mạng để gọi API
+        const settings: any = await invoke('load_settings').catch(() => null);
 
-        // 🔥 BÓC VỎ Ở ĐÂY: Nếu có .data thì lấy .data, không thì lấy nguyên gốc
-        const actualInitialData = response.data ? response.data : response;
-        setSensorData(actualInitialData);
+        // 1. LẤY DATA KHỞI TẠO BẰNG HTTP FETCH (Thay cho invoke cũ)
+        if (settings && settings.backend_url) {
+          try {
+            const url = `${settings.backend_url}/api/devices/${deviceId}/sensors/latest`;
+            const response = await fetch(url, {
+              method: 'GET',
+              headers: {
+                'Content-Type': 'application/json',
+                'X-API-Key': settings.api_key
+              }
+            });
+
+            if (response.ok) {
+              const resData = await response.json();
+              // Bóc vỏ JSON y hệt logic cũ của bạn
+              const actualInitialData = resData.data ? resData.data : resData;
+              setSensorData(actualInitialData);
+            }
+          } catch (fetchErr) {
+            console.warn("Chưa lấy được data sensor mới nhất:", fetchErr);
+          }
+        }
         setIsLoading(false);
 
-        // 2. Lắng nghe WebSocket cũng phải đề phòng bị bọc vỏ tương tự
+        // 2. LẮNG NGHE WEBSOCKET TỪ RUST (Giữ nguyên)
         sensorPromise = listen<any>('sensor_update', (event) => {
           const actualEventData = event.payload.data ? event.payload.data : event.payload;
           setSensorData(actualEventData);
         });
 
         statusPromise = listen<StatusPayload>('device_status', (event) => {
-          console.log("🟢 Nhận được trạng thái từ Rust:", JSON.stringify(event.payload)); // In ra để dễ debug
+          console.log("🟢 Nhận được trạng thái từ Rust:", JSON.stringify(event.payload));
           setDeviceStatus(event.payload);
         });
 
@@ -46,7 +65,7 @@ export function useDeviceSensor(deviceId: string) {
         // Đợi tất cả listener đăng ký xong xuôi...
         await Promise.all([sensorPromise, statusPromise, alertPromise]);
 
-        // 3. RỒI MỚI BẢO RUST KHỞI ĐỘNG WEBSOCKET
+        // 3. RỒI MỚI BẢO RUST KHỞI ĐỘNG WEBSOCKET LISTENER
         await invoke('start_ws_listener', { deviceId });
 
       } catch (error) {
@@ -57,7 +76,7 @@ export function useDeviceSensor(deviceId: string) {
 
     setup();
 
-    // 4. Cleanup function chuẩn xác (đợi unlisten resolve mới gọi)
+    // 4. Cleanup
     return () => {
       if (sensorPromise) sensorPromise.then(unlisten => unlisten());
       if (statusPromise) statusPromise.then(unlisten => unlisten());

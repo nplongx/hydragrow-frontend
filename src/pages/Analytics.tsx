@@ -1,25 +1,15 @@
+// src/pages/Analytics.tsx
 import { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { fetch } from '@tauri-apps/plugin-http'; // <--- Import Native HTTP
+import { listen } from '@tauri-apps/api/event';
 import { Download, Activity, Droplets, Thermometer, Waves } from 'lucide-react';
 import {
-  AreaChart,
-  Area,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer
+  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
 } from 'recharts';
 import { SensorData } from '../types/models';
-import { listen } from '@tauri-apps/api/event';
 
 const DEVICE_ID = "device_001";
-
-// type response từ Rust
-type SensorHistoryResponse = {
-  data: SensorData[];
-  status: string;
-};
 
 const Analytics = () => {
   const [historyData, setHistoryData] = useState<any[]>([]);
@@ -28,35 +18,53 @@ const Analytics = () => {
 
   // Lấy dữ liệu 24h VÀ lắng nghe Realtime
   useEffect(() => {
-    let unlistenSensorUpdate: Promise<() => void>; // Biến dọn dẹp listener
+    let unlistenSensorUpdate: Promise<() => void>;
 
     const fetchHistory = async () => {
       try {
         setIsLoading(true);
 
+        // 1. Lấy cấu hình máy chủ từ Store
+        const settings: any = await invoke('load_settings').catch(() => null);
+        if (!settings || !settings.backend_url) {
+          console.warn("Chưa cấu hình Backend URL");
+          return;
+        }
+
         const end = new Date();
         const start = new Date(end.getTime() - 24 * 60 * 60 * 1000);
 
-        const response = await invoke<SensorHistoryResponse>(
-          'get_sensor_history',
-          {
-            deviceId: DEVICE_ID,
-            start: start.toISOString(),
-            end: end.toISOString(),
-            limit: 100
+        // 2. Gọi API trực tiếp bằng Native HTTP
+        const queryParams = new URLSearchParams({
+          start: start.toISOString(),
+          end: end.toISOString(),
+          limit: '100'
+        }).toString();
+
+        const url = `${settings.backend_url}/api/devices/${DEVICE_ID}/sensors/history?${queryParams}`;
+        const response = await fetch(url, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-API-Key': settings.api_key
           }
-        );
+        });
 
-        const formattedData = response.data.map((d: SensorData) => ({
-          ...d,
-          formattedTime: new Date(d.time).toLocaleTimeString('vi-VN', {
-            hour: '2-digit',
-            minute: '2-digit'
-          })
-        }));
+        if (response.ok) {
+          const resData = await response.json();
+          const actualData = resData.data ? resData.data : resData; // Bóc vỏ JSON nếu cần
 
-        setHistoryData(formattedData.reverse());
-
+          if (Array.isArray(actualData)) {
+            const formattedData = actualData.map((d: SensorData) => ({
+              ...d,
+              formattedTime: new Date(d.time).toLocaleTimeString('vi-VN', {
+                hour: '2-digit',
+                minute: '2-digit'
+              })
+            }));
+            setHistoryData(formattedData.reverse());
+          }
+        }
       } catch (error) {
         console.error("Lỗi lấy lịch sử:", error);
       } finally {
@@ -66,9 +74,7 @@ const Analytics = () => {
 
     const setupRealtime = async () => {
       unlistenSensorUpdate = listen<any>('sensor_update', (event) => {
-        // 🟢 Thêm dòng này để nhìn thấy data từ Backend bắn về
-        console.log("🔥 Tín hiệu Realtime ập đến:", event.payload);
-
+        // console.log("🔥 Tín hiệu Realtime ập đến:", event.payload);
         const newData = event.payload.data ? event.payload.data : event.payload;
 
         if (newData.device_id !== DEVICE_ID) return;
@@ -85,10 +91,6 @@ const Analytics = () => {
           if (prevData.length > 0 && prevData[prevData.length - 1].time === newData.time) {
             return prevData; // Bỏ qua trùng lặp
           }
-
-          // 🟢 Thêm dòng này để thấy Chart được nạp đạn
-          console.log("📈 Cập nhật điểm mới lên biểu đồ:", newFormattedData);
-
           const updated = [...prevData, newFormattedData];
           return updated.slice(-100);
         });
@@ -101,11 +103,9 @@ const Analytics = () => {
       }
     };
 
-    // Gọi 2 hàm
     fetchHistory();
     setupRealtime();
 
-    // Dọn dẹp listener khi component bị hủy (chuyển trang)
     return () => {
       if (unlistenSensorUpdate) {
         unlistenSensorUpdate.then(unlisten => unlisten());
@@ -113,56 +113,72 @@ const Analytics = () => {
     };
   }, []);
 
-  // Export CSV
+  // Export CSV bằng cách tải data 7 ngày rồi tự generate trên JS (Không cần đổi Backend)
   const handleExportCSV = async () => {
     setIsExporting(true);
-
     try {
+      const settings: any = await invoke('load_settings').catch(() => null);
+      if (!settings || !settings.backend_url) throw new Error("Missing Backend Configuration");
+
       const end = new Date();
       const start = new Date(end.getTime() - 7 * 24 * 60 * 60 * 1000);
 
-      const csvString = await invoke<string>('export_csv', {
-        deviceId: DEVICE_ID,
+      // Gọi API lấy lịch sử 7 ngày (Limit lớn một chút)
+      const queryParams = new URLSearchParams({
         start: start.toISOString(),
-        end: end.toISOString()
+        end: end.toISOString(),
+        limit: '10000'
+      }).toString();
+
+      const url = `${settings.backend_url}/api/devices/${DEVICE_ID}/sensors/history?${queryParams}`;
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: { 'X-API-Key': settings.api_key }
       });
 
-      const blob = new Blob([csvString], {
-        type: 'text/csv;charset=utf-8;'
-      });
+      if (!response.ok) throw new Error("Không thể lấy dữ liệu lịch sử");
 
+      const resData = await response.json();
+      const exportData = resData.data ? resData.data : resData;
+
+      if (!Array.isArray(exportData) || exportData.length === 0) {
+        alert("Không có dữ liệu để xuất.");
+        return;
+      }
+
+      // Convert JSON sang CSV format
+      const headers = "Time,EC,pH,Temp,WaterLevel\n";
+      const rows = exportData.map((d: SensorData) =>
+        `${d.time},${d.ec_value.toFixed(2)},${d.ph_value.toFixed(2)},${d.temp_value.toFixed(2)},${d.water_level.toFixed(2)}`
+      ).join('\n');
+      const csvString = headers + rows;
+
+      // Logic tải file tự động xuống máy
+      const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
       const link = document.createElement('a');
-      const url = URL.createObjectURL(blob);
+      const blobUrl = URL.createObjectURL(blob);
 
-      link.setAttribute('href', url);
+      link.setAttribute('href', blobUrl);
       link.setAttribute('download', `hydro_export_${Date.now()}.csv`);
-
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
 
     } catch (error) {
       console.error("Lỗi xuất CSV:", error);
+      alert("Lỗi xuất file CSV, vui lòng thử lại.");
     } finally {
       setIsExporting(false);
     }
   };
 
-  // Tooltip cho chart
   const CustomTooltip = ({ active, payload, label }: any) => {
     if (active && payload && payload.length) {
       return (
         <div className="bg-slate-800 border border-slate-700 p-3 rounded-xl shadow-xl">
-          <p className="text-slate-300 text-xs mb-2 font-medium">
-            {label}
-          </p>
-
+          <p className="text-slate-300 text-xs mb-2 font-medium">{label}</p>
           {payload.map((entry: any, index: number) => (
-            <div
-              key={index}
-              className="flex items-center space-x-2 text-sm font-bold"
-              style={{ color: entry.color }}
-            >
+            <div key={index} className="flex items-center space-x-2 text-sm font-bold" style={{ color: entry.color }}>
               <span>{entry.name}:</span>
               <span>{entry.value.toFixed(2)}</span>
             </div>
@@ -170,22 +186,16 @@ const Analytics = () => {
         </div>
       );
     }
-
     return null;
   };
 
   return (
     <div className="p-4 space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-white mb-1">
-            Phân Tích
-          </h1>
-          <p className="text-sm text-slate-400">
-            Dữ liệu 24 giờ qua
-          </p>
+          <h1 className="text-2xl font-bold tracking-tight text-white mb-1">Phân Tích</h1>
+          <p className="text-sm text-slate-400">Dữ liệu 24 giờ qua</p>
         </div>
 
         <button
@@ -212,9 +222,7 @@ const Analytics = () => {
           <div className="bg-slate-900 border border-slate-800 rounded-3xl p-4 pt-6">
             <div className="flex items-center space-x-2 mb-4 px-2">
               <Activity className="text-blue-400" size={20} />
-              <h3 className="text-white font-semibold">
-                Biến thiên EC
-              </h3>
+              <h3 className="text-white font-semibold">Biến thiên EC</h3>
             </div>
             <div className="h-48 w-full">
               <ResponsiveContainer width="100%" height="100%">
@@ -239,9 +247,7 @@ const Analytics = () => {
           <div className="bg-slate-900 border border-slate-800 rounded-3xl p-4 pt-6">
             <div className="flex items-center space-x-2 mb-4 px-2">
               <Droplets className="text-fuchsia-400" size={20} />
-              <h3 className="text-white font-semibold">
-                Biến thiên pH
-              </h3>
+              <h3 className="text-white font-semibold">Biến thiên pH</h3>
             </div>
             <div className="h-48 w-full">
               <ResponsiveContainer width="100%" height="100%">
@@ -266,9 +272,7 @@ const Analytics = () => {
           <div className="bg-slate-900 border border-slate-800 rounded-3xl p-4 pt-6">
             <div className="flex items-center space-x-2 mb-4 px-2">
               <Thermometer className="text-orange-400" size={20} />
-              <h3 className="text-white font-semibold">
-                Biến thiên Nhiệt độ (°C)
-              </h3>
+              <h3 className="text-white font-semibold">Biến thiên Nhiệt độ (°C)</h3>
             </div>
             <div className="h-48 w-full">
               <ResponsiveContainer width="100%" height="100%">
@@ -293,9 +297,7 @@ const Analytics = () => {
           <div className="bg-slate-900 border border-slate-800 rounded-3xl p-4 pt-6">
             <div className="flex items-center space-x-2 mb-4 px-2">
               <Waves className="text-cyan-400" size={20} />
-              <h3 className="text-white font-semibold">
-                Mực Nước Hệ Thống (%)
-              </h3>
+              <h3 className="text-white font-semibold">Mực Nước Hệ Thống (%)</h3>
             </div>
             <div className="h-48 w-full">
               <ResponsiveContainer width="100%" height="100%">
@@ -318,7 +320,6 @@ const Analytics = () => {
 
         </div>
       )}
-
       <div className="h-6"></div>
     </div>
   );

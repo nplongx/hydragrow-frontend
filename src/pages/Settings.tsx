@@ -1,4 +1,3 @@
-// src/pages/Settings.tsx
 import React from 'react';
 import { useState, useEffect } from 'react';
 import {
@@ -7,6 +6,7 @@ import {
   Network
 } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
+import { fetch } from '@tauri-apps/plugin-http'; // <--- Import Native HTTP
 
 interface ToggleSwitchProps {
   checked: boolean;
@@ -32,7 +32,6 @@ const InputGroup = ({ label, type = "number", value, onChange, step, desc }: any
   </div>
 );
 
-// Component mới giúp gom nhóm UI bớt ngộp
 const SubCard = ({ title, children, className = "" }: any) => (
   <div className={`bg-slate-950/40 border border-slate-800/60 rounded-xl p-3 ${className}`}>
     {title && <h3 className="text-[11px] font-semibold text-slate-400 mb-3 uppercase tracking-wider">{title}</h3>}
@@ -77,35 +76,12 @@ const Settings = () => {
   const handleToggleSection = (id: string) => setOpenSection(openSection === id ? null : id);
 
   const [deviceConfig, setDeviceConfig] = useState({
-    control_mode: 'auto',
-    is_enabled: 1,
-    ec_target: 1.5,
-    ec_tolerance: 0.05,
-    ph_target: 6.0,
-    ph_tolerance: 0.5,
-    temp_target: 24.0,
-    temp_tolerance: 2.0,
-    last_updated: '',
-
-    // --- CÁC TRƯỜNG ĐÃ ĐƯỢC BỔ SUNG THÊM ---
-    ec_ack_threshold: 0.05,
-    ph_ack_threshold: 0.1,
-    water_ack_threshold: 0.5,
-    soft_start_duration: 3000,
-    misting_on_duration_ms: 10000,
-    misting_off_duration_ms: 180000,
-    misting_temp_threshold: 30.0,
-    high_temp_misting_on_duration_ms: 15000,
-    high_temp_misting_off_duration_ms: 60000,
-
-    dosing_pwm_percent: 50,
-    osaka_mixing_pwm_percent: 60,
-    osaka_misting_pwm_percent: 100,
-
-    active_mixing_sec: 5,
-    sensor_stabilize_sec: 5,
-    scheduled_mixing_interval_sec: 3600,
-    scheduled_mixing_duration_sec: 300
+    control_mode: 'auto', is_enabled: 1, ec_target: 1.5, ec_tolerance: 0.05, ph_target: 6.0, ph_tolerance: 0.5,
+    temp_target: 24.0, temp_tolerance: 2.0, last_updated: '', ec_ack_threshold: 0.05, ph_ack_threshold: 0.1,
+    water_ack_threshold: 0.5, soft_start_duration: 3000, misting_on_duration_ms: 10000, misting_off_duration_ms: 180000,
+    misting_temp_threshold: 30.0, high_temp_misting_on_duration_ms: 15000, high_temp_misting_off_duration_ms: 60000,
+    dosing_pwm_percent: 50, osaka_mixing_pwm_percent: 60, osaka_misting_pwm_percent: 100, active_mixing_sec: 5,
+    sensor_stabilize_sec: 5, scheduled_mixing_interval_sec: 3600, scheduled_mixing_duration_sec: 300
   });
 
   const [waterConfig, setWaterConfig] = useState({
@@ -128,8 +104,7 @@ const Settings = () => {
   });
 
   const [sensorCalib, setSensorCalib] = useState({
-    device_id: 'DEVICE_001',
-    ph_v7: 2.5, ph_v4: 1.428, ec_factor: 880.0, ec_offset: 0.0, temp_offset: 0.0, temp_compensation_beta: 0.02,
+    device_id: 'DEVICE_001', ph_v7: 2.5, ph_v4: 1.428, ec_factor: 880.0, ec_offset: 0.0, temp_offset: 0.0, temp_compensation_beta: 0.02,
     sampling_interval: 1000, publish_interval: 5000, moving_average_window: 10,
     is_ph_enabled: 1, is_ec_enabled: 1, is_temp_enabled: 1, is_water_level_enabled: 1, last_calibrated: ''
   });
@@ -138,22 +113,42 @@ const Settings = () => {
     api_key: 'long', backend_url: 'http://192.168.1.3:8000', device_id: 'DEVICE_001'
   });
 
+  // HÀM HELPER GỌI API TRỰC TIẾP QUA TAURI NATIVE HTTP
+  const callApi = async (path: string, method: string = 'GET', body: any = null, currentSettings: any = appSettings) => {
+    const url = `${currentSettings.backend_url}${path}`;
+    const options: any = {
+      method,
+      headers: {
+        'Content-Type': 'application/json',
+        'X-API-Key': currentSettings.api_key
+      }
+    };
+    if (body) {
+      options.body = JSON.stringify(body);
+    }
+    const res = await fetch(url, options);
+    if (!res.ok) throw new Error(`HTTP Error ${res.status}`);
+    return await res.json();
+  };
+
   useEffect(() => {
     const loadAllConfigs = async () => {
       try {
         setIsLoading(true);
         let settings: any = null;
-        try { settings = await invoke('load_settings'); if (settings) setAppSettings(settings); } catch (e) { }
+        try {
+          settings = await invoke('load_settings');
+          if (settings) setAppSettings(settings);
+        } catch (e) { console.error("Chưa load được store"); }
 
         const currentDeviceId = settings?.device_id || appSettings.device_id;
-        const reqArgs = { deviceId: currentDeviceId };
 
         const [devConf, safeConf, sensCalib, waterConf, dosingCalib]: any[] = await Promise.all([
-          invoke('get_device_config', reqArgs).catch(() => null),
-          invoke('get_safety_config', reqArgs).catch(() => null),
-          invoke('get_sensor_calibration', reqArgs).catch(() => null),
-          invoke('get_water_config', reqArgs).catch(() => null),
-          invoke('get_dosing_calibration', reqArgs).catch(() => null),
+          callApi(`/api/devices/${currentDeviceId}/config`, 'GET', null, settings).catch(() => null),
+          callApi(`/api/devices/${currentDeviceId}/config/safety`, 'GET', null, settings).catch(() => null),
+          callApi(`/api/devices/${currentDeviceId}/calibration/sensor`, 'GET', null, settings).catch(() => null),
+          callApi(`/api/devices/${currentDeviceId}/config/water`, 'GET', null, settings).catch(() => null),
+          callApi(`/api/devices/${currentDeviceId}/calibration/dosing`, 'GET', null, settings).catch(() => null),
         ]);
 
         if (devConf) setDeviceConfig(prev => ({ ...prev, ...devConf }));
@@ -161,7 +156,11 @@ const Settings = () => {
         if (sensCalib) setSensorCalib(prev => ({ ...prev, ...sensCalib }));
         if (waterConf) setWaterConfig(prev => ({ ...prev, ...waterConf }));
         if (dosingCalib) setDosingConfig(prev => ({ ...prev, ...dosingCalib }));
-      } catch (error) { console.error(error); } finally { setIsLoading(false); }
+      } catch (error) {
+        console.error(error);
+      } finally {
+        setIsLoading(false);
+      }
     };
     loadAllConfigs();
   }, []);
@@ -170,20 +169,25 @@ const Settings = () => {
     setIsSaving(true); setSaveMessage(null);
     try {
       const devId = appSettings.device_id;
+
+      // Lưu lại vào store local
       try { await invoke('save_settings', { apiKey: appSettings.api_key, backendUrl: appSettings.backend_url, deviceId: devId }); } catch (e) { }
 
       const ts = new Date().toISOString();
+
+      // Bắn trực tiếp API lên Backend Actix
       await Promise.all([
-        invoke('update_device_config', { deviceId: devId, config: { ...deviceConfig, device_id: devId, last_updated: ts } }),
-        invoke('update_safety_config', { deviceId: devId, config: { ...safetyConfig, device_id: devId, last_updated: ts } }),
-        invoke('update_sensor_calibration', { deviceId: devId, config: { ...sensorCalib, device_id: devId, last_calibrated: ts } }),
-        invoke('update_water_config', { deviceId: devId, config: { ...waterConfig, device_id: devId, last_updated: ts } }),
-        invoke('update_dosing_calibration', { deviceId: devId, config: { ...dosingConfig, device_id: devId, last_calibrated: ts } }),
+        callApi(`/api/devices/${devId}/config`, 'PUT', { ...deviceConfig, device_id: devId, last_updated: ts }),
+        callApi(`/api/devices/${devId}/config/safety`, 'POST', { ...safetyConfig, device_id: devId, last_updated: ts }),
+        callApi(`/api/devices/${devId}/calibration/sensor`, 'POST', { ...sensorCalib, device_id: devId, last_calibrated: ts }),
+        callApi(`/api/devices/${devId}/config/water`, 'POST', { ...waterConfig, device_id: devId, last_updated: ts }),
+        callApi(`/api/devices/${devId}/calibration/dosing`, 'POST', { ...dosingConfig, device_id: devId, last_calibrated: ts }),
       ]);
 
       setSaveMessage({ type: 'success', text: 'Đã lưu cấu hình thành công!' });
       setTimeout(() => setSaveMessage(null), 3000);
     } catch (error: any) {
+      console.error(error);
       setSaveMessage({ type: 'error', text: 'Lỗi khi lưu cấu hình.' });
     } finally { setIsSaving(false); }
   };

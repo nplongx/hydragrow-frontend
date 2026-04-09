@@ -6,8 +6,10 @@ use tauri::{AppHandle, Emitter, Manager};
 use tokio::time::{sleep, Duration};
 use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
 
-use crate::http_client::get_settings;
-use crate::models::{AlertPayload, SensorData, StatusPayload};
+use crate::{
+    commands::get_settings,
+    models::{AlertPayload, SensorData, StatusPayload},
+};
 
 /// Giả định cấu trúc message từ Backend gửi qua WS có chứa trường `type` để phân biệt
 #[derive(Debug, Deserialize)]
