@@ -120,17 +120,17 @@ const Analytics = () => {
       const settings: any = await invoke('load_settings').catch(() => null);
       if (!settings || !settings.backend_url) throw new Error("Missing Backend Configuration");
 
-      const end = new Date();
-      const start = new Date(end.getTime() - 7 * 24 * 60 * 60 * 1000);
+      // const end = new Date();
+      // const start = new Date(end.getTime() - 7 * 24 * 60 * 60 * 1000);
 
       // Gọi API lấy lịch sử 7 ngày (Limit lớn một chút)
-      const queryParams = new URLSearchParams({
-        start: start.toISOString(),
-        end: end.toISOString(),
-        limit: '10000'
-      }).toString();
+      // const queryParams = new URLSearchParams({
+      //   start: start.toISOString(),
+      //   end: end.toISOString(),
+      //   limit: '10000'
+      // }).toString();
 
-      const url = `${settings.backend_url}/api/devices/${DEVICE_ID}/sensors/history?${queryParams}`;
+      const url = `${settings.backend_url}/api/devices/${DEVICE_ID}/sensors/history`;
       const response = await fetch(url, {
         method: 'GET',
         headers: { 'X-API-Key': settings.api_key }

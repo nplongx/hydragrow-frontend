@@ -5,7 +5,7 @@
   "identifier": "com.hydragrow-frontend",
   "build": {
     "beforeDevCommand": "npm run dev",
-    "devUrl": "https://hydragrow-frontend-b7gepdkn5-nplongxs-projects.vercel.app/",
+    "devUrl": "https://hydragrow-frontend-git-mist-nplongxs-projects.vercel.app/",
     "beforeBuildCommand": "npm run build",
     "frontendDist": "../dist"
   },
