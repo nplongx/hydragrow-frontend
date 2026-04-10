@@ -34,6 +34,7 @@ class MainActivity : TauriActivity() {
                     conn.requestMethod = "POST"
                     conn.setRequestProperty("Content-Type", "application/json; utf-8")
                     conn.setRequestProperty("Accept", "application/json")
+                    conn.setRequestProperty("x-api-key", "long")
                     conn.doOutput = true
 
                     // Đóng gói JSON { "fcm_token": "..." }
