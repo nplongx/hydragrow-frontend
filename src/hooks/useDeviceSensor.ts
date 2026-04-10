@@ -37,6 +37,7 @@ export function useDeviceSensor(deviceId: string) {
             const resData = await response.json();
             const actualInitialData = resData.data ? resData.data : resData;
             setSensorData(actualInitialData);
+            setDeviceStatus({ is_online: true, last_seen: '' });
           }
         } catch (fetchErr) {
           console.warn("Chưa lấy được data sensor mới nhất:", fetchErr);
@@ -44,7 +45,12 @@ export function useDeviceSensor(deviceId: string) {
         setIsLoading(false);
 
         // 2. KẾT NỐI WEBSOCKET TRỰC TIẾP TRONG REACT (Bỏ qua Tauri IPC)
-        const wsUrl = settings.backend_url.replace(/^http/, 'ws') + '/ws';
+        // Xóa dấu gạch chéo ở cuối url nếu có để tránh lỗi //ws
+        const cleanBaseUrl = settings.backend_url.replace(/\/$/, "");
+
+        // 🟢 THÊM QUERY PARAMETERS (device_id và api_key) VÀO URL
+        const wsUrl = `${cleanBaseUrl.replace(/^http/, 'ws')}/ws?device_id=${deviceId}&api_key=${settings.api_key}`;
+
         ws = new WebSocket(wsUrl);
 
         ws.onopen = () => {

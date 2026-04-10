@@ -1,19 +1,79 @@
 // src/types/models.ts
 
+/**
+ * Trạng thái hoạt động cơ bản của thiết bị
+ */
+export type DeviceState = 'on' | 'off';
+
+/**
+ * Trạng thái chi tiết của tất cả các máy bơm và van trong hệ thống
+ */
+export interface PumpStatus {
+  A: DeviceState;          // Bơm dinh dưỡng A
+  B: DeviceState;          // Bơm dinh dưỡng B
+  PH_UP: DeviceState;      // Bơm tăng pH
+  PH_DOWN: DeviceState;    // Bơm giảm pH
+  OSAKA_PUMP: DeviceState; // Bơm trộn/phun sương chính (Osaka)
+  MIST_VALVE: DeviceState; // Van điện từ phun sương
+  WATER_PUMP: DeviceState; // Bơm cấp nước vào (In)
+  DRAIN_PUMP: DeviceState; // Bơm thoát nước ra (Out)
+}
+
+/**
+ * Dữ liệu thu thập từ các cảm biến của thiết bị
+ */
+export interface SensorData {
+  device_id: string;
+  ec_value: number;        // Giá trị EC (Độ dẫn điện)
+  ph_value: number;        // Giá trị pH
+  temp_value: number;      // Nhiệt độ nước/môi trường
+  water_level: number;     // Mực nước (cm)
+  pump_status: PumpStatus; // Trạng thái bơm đồng bộ từ FSM
+  time: string;       // Thời gian ghi nhận dữ liệu
+}
+
+/**
+ * Cấu trúc thông báo cảnh báo hệ thống
+ */
+export interface AlertPayload {
+  id: string;
+  metric: string;          // Chỉ số gây ra lỗi (ví dụ: "EC", "WaterLevel")
+  value: number;           // Giá trị tại thời điểm xảy ra lỗi
+  severity: 'info' | 'warning' | 'critical';
+  message: string;         // Nội dung cảnh báo chi tiết
+  timestamp: string;
+}
+
+/**
+ * Trạng thái kết nối của thiết bị với Server/Broker
+ */
+export interface StatusPayload {
+  is_online: boolean;      // Thiết bị có đang kết nối MQTT không
+  last_seen: string;       // Lần cuối cùng nhận được tín hiệu (Heartbeat)
+}
+
+/**
+ * Trạng thái máy trạng thái (FSM) gửi từ Controller
+ */
+export interface FsmStatePayload {
+  current_state: string;   // Ví dụ: "Monitoring", "DosingEC", "EmergencyStop"
+  timestamp: string;
+}
+
+// src/types/models.ts
+
 export interface UnifiedDeviceConfig {
   device_id: string;
   control_mode: 'auto' | 'manual';
   is_enabled: boolean;
 
-  // --- 1. Ngưỡng mục tiêu ---
+  // --- Ngưỡng mục tiêu ---
   ec_target: number;
   ec_tolerance: number;
   ph_target: number;
   ph_tolerance: number;
-  temp_target: number;
-  temp_tolerance: number;
 
-  // --- 2. Nước & Bơm ---
+  // --- Nước & Bơm ---
   water_level_min: number;
   water_level_target: number;
   water_level_max: number;
@@ -28,7 +88,7 @@ export interface UnifiedDeviceConfig {
   misting_on_duration_ms: number;
   misting_off_duration_ms: number;
 
-  // --- 3. An Toàn ---
+  // --- An Toàn ---
   emergency_shutdown: boolean;
   max_ec_limit: number;
   min_ec_limit: number;
@@ -44,7 +104,7 @@ export interface UnifiedDeviceConfig {
   ph_ack_threshold: number;
   water_ack_threshold: number;
 
-  // --- 4. Châm Phân ---
+  // --- Châm Phân ---
   ec_gain_per_ml: number;
   ph_shift_up_per_ml: number;
   ph_shift_down_per_ml: number;
@@ -57,7 +117,7 @@ export interface UnifiedDeviceConfig {
   scheduled_mixing_interval_sec: number;
   scheduled_mixing_duration_sec: number;
 
-  // --- 5. Cảm biến & Lọc nhiễu ---
+  // --- Cảm biến & Lọc nhiễu ---
   ph_v7: number;
   ph_v4: number;
   ec_factor: number;
@@ -68,7 +128,7 @@ export interface UnifiedDeviceConfig {
   publish_interval: number;
   moving_average_window: number;
 
-  // --- 6. Cờ Bật/Tắt Cảm Biến ---
+  // --- Cờ Bật/Tắt Cảm Biến ---
   enable_ec_sensor: boolean;
   enable_ph_sensor: boolean;
   enable_water_level_sensor: boolean;
