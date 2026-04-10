@@ -2,35 +2,55 @@ package com.hydragrow_frontend
 
 import android.os.Bundle
 import android.util.Log
+import com.google.firebase.FirebaseApp // 🟢 1. THÊM IMPORT NÀY
 import com.google.firebase.messaging.FirebaseMessaging
+import org.json.JSONObject
+import java.net.HttpURLConnection
+import java.net.URL
+import kotlin.concurrent.thread
 
-class MainActivity : app.tauri.plugin.TauriActivity() {
+class MainActivity : TauriActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // 1. Gọi API Native của Android để lấy FCM Token
+        // 🟢 2. ÉP FIREBASE KHỞI TẠO TRƯỚC KHI LÀM BẤT CỨ VIỆC GÌ KHÁC
+        FirebaseApp.initializeApp(this)
+
+        // 1. Lấy FCM Token từ Google Play Services
         FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
             if (!task.isSuccessful) {
                 Log.w("FCM_NATIVE", "Không thể lấy FCM token", task.exception)
                 return@addOnCompleteListener
             }
 
-            val token = task.result
-            Log.d("FCM_NATIVE", "Đã lấy được Token: $token")
+            val token = task.result ?: return@addOnCompleteListener
+            Log.d("FCM_NATIVE", "📱 Đã lấy được Token: $token")
 
-            // 2. Bơm Token này vào React thông qua JavaScript Injection
-            Thread {
-                Thread.sleep(3000) // Đợi 3 giây cho React render xong giao diện
-                runOnUiThread {
-                    // Tạo một biến global và phát một Event để React bắt
-                    val jsCode = """
-                        window.NATIVE_FCM_TOKEN = '$token';
-                        window.dispatchEvent(new CustomEvent('on_fcm_token', { detail: '$token' }));
-                    """.trimIndent()
-                    
-                    this.bridge.webView.evaluateJavascript(jsCode, null)
+            // 2. Gửi thẳng Token lên Backend Actix bằng Kotlin (Chạy luồng ngầm)
+            thread {
+                try {
+                    val url = URL("https://hydragrow-backend.onrender.com/api/notifications/register")
+                    val conn = url.openConnection() as HttpURLConnection
+                    conn.requestMethod = "POST"
+                    conn.setRequestProperty("Content-Type", "application/json; utf-8")
+                    conn.setRequestProperty("Accept", "application/json")
+                    conn.doOutput = true
+
+                    // Đóng gói JSON { "fcm_token": "..." }
+                    val jsonParam = JSONObject()
+                    jsonParam.put("fcm_token", token)
+
+                    conn.outputStream.use { os ->
+                        val input = jsonParam.toString().toByteArray(Charsets.UTF_8)
+                        os.write(input, 0, input.size)
+                    }
+
+                    Log.d("FCM_NATIVE", "✅ Đã đăng ký Token! HTTP Status: ${conn.responseCode}")
+                    conn.disconnect()
+                } catch (e: Exception) {
+                    Log.e("FCM_NATIVE", "❌ Lỗi gửi token lên Backend", e)
                 }
-            }.start()
+            }
         }
     }
 }

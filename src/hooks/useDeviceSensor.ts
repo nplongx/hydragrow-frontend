@@ -51,23 +51,29 @@ export function useDeviceSensor(deviceId: string) {
           console.log('🟢 [SensorHook] Đã kết nối WebSocket lấy dữ liệu trực tiếp');
         };
 
+        // Trong file src/hooks/useDeviceSensor.ts
         ws.onmessage = (event) => {
           try {
             const data = JSON.parse(event.data);
 
-            // 🟢 LỌC BẢN TIN: Bỏ qua các bản tin không phải của Sensor
-            if (data.type === 'alert' || data.type === 'blockchain_verified') {
-              return; // Để hook useSystemAlerts tự xử lý
+            // Bắt trạng thái Online/Offline thông qua Alert
+            if (data.type === 'alert' && data.payload.title === 'Trạng thái thiết bị') {
+              const isOnline = data.payload.level === 'success'; // success là online, warning là offline
+              setDeviceStatus({ is_online: isOnline, last_seen: '' });
+              return; // Cập nhật xong thì thoát
             }
 
+            // Bỏ qua các alert khác (Để useSystemAlerts tự lo)
+            if (data.type === 'alert' || data.type === 'blockchain_verified') {
+              return;
+            }
+
+            // Xử lý Sensor
             if (data.type === 'sensor_update') {
               const actualEventData = data.payload.data ? data.payload.data : data.payload;
               setSensorData(actualEventData);
             }
-            else if (data.type === 'device_status') {
-              console.log("🟢 Nhận được trạng thái thiết bị:", data);
-              setDeviceStatus({ is_online: data.online, last_seen: '' });
-            }
+
           } catch (err) {
             console.error("Lỗi parse WS Message trong SensorHook:", err);
           }
