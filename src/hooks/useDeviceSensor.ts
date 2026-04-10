@@ -56,6 +56,8 @@ export function useDeviceSensor(deviceId: string) {
           try {
             const data = JSON.parse(event.data);
 
+            console.log("📥 WS Nhận:", data.type, data.payload);
+
             // Bắt trạng thái Online/Offline thông qua Alert
             if (data.type === 'alert' && data.payload.title === 'Trạng thái thiết bị') {
               const isOnline = data.payload.level === 'success'; // success là online, warning là offline
@@ -69,11 +71,22 @@ export function useDeviceSensor(deviceId: string) {
             }
 
             // Xử lý Sensor
+            // Xử lý Sensor
             if (data.type === 'sensor_update') {
               const actualEventData = data.payload.data ? data.payload.data : data.payload;
-              setSensorData(actualEventData);
-            }
 
+              // 1. Cập nhật dữ liệu cảm biến
+              setSensorData(actualEventData);
+
+              // 2. 🟢 THÊM DÒNG NÀY: Mạch còn gửi Sensor nghĩa là mạch đang ONLINE! (Self-healing)
+              setDeviceStatus(prev => {
+                if (!prev.is_online) {
+                  console.log("🟢 Auto-detected Device Online via Sensor Data!");
+                  return { is_online: true, last_seen: new Date().toISOString() };
+                }
+                return prev;
+              });
+            }
           } catch (err) {
             console.error("Lỗi parse WS Message trong SensorHook:", err);
           }
