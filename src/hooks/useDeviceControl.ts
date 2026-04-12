@@ -74,10 +74,30 @@ export function useDeviceControl(deviceId: string) {
     }
   };
 
+  const syncDeviceStatus = async () => {
+    try {
+      const settings: any = await invoke('load_settings').catch(() => null);
+      if (!settings || !settings.backend_url) return false;
+
+      await fetch(`${settings.backend_url}/api/devices/${deviceId}/sync`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-API-Key': settings.api_key
+        }
+      });
+      return true;
+    } catch (error) {
+      console.error("Lỗi khi yêu cầu sync thiết bị:", error);
+      return false;
+    }
+  };
+
   return {
     isProcessing,
     error,
     togglePump,
-    setPumpPwm
+    setPumpPwm,
+    syncDeviceStatus
   };
 }

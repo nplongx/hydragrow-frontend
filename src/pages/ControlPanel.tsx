@@ -75,7 +75,13 @@ const ControlPanel = () => {
 
 const ControlPanelContent = ({ deviceId }: { deviceId: string }) => {
   const { sensorData, deviceStatus, fsmState, isLoading, updatePumpStatusOptimistically } = useDeviceContext();
-  const { isProcessing, togglePump, setPumpPwm } = useDeviceControl(deviceId);
+  const { isProcessing, togglePump, setPumpPwm, syncDeviceStatus } = useDeviceControl(deviceId);
+
+  useEffect(() => {
+    if (deviceStatus?.is_online) {
+      syncDeviceStatus();
+    }
+  }, [deviceStatus?.is_online]);
 
   const [pwmValues, setPwmValues] = useState<Record<string, number>>({
     OSAKA_PUMP: 100, MIST_VALVE: 100, A: 50, B: 50, PH_UP: 50, PH_DOWN: 50
