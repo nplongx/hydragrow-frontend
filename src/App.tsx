@@ -1,47 +1,44 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
-import { Toaster } from 'react-hot-toast'; // 🟢 1. Import Toaster
-
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import MainLayout from './components/layout/MainLayout';
 import Dashboard from './pages/Dashboard';
-import './App.css';
 import ControlPanel from './pages/ControlPanel';
 import Analytics from './pages/Analytics';
 import Settings from './pages/Settings';
 import BlockchainHistory from './pages/BlockchainHistory';
-import { useFCM } from './hooks/useFCM';
+import { DeviceProvider } from './context/DeviceContext';
+// 🟢 1. IMPORT TOASTER TỪ REACT-HOT-TOAST
+import { Toaster } from 'react-hot-toast';
+import './App.css';
 
 function App() {
-  // 🟢 2. Luồng lắng nghe WebSocket chạy ngầm toàn hệ thống
-  // Dù user chuyển qua trang Settings hay Analytics, App vẫn đang nghe Alert!
-
-  useFCM();
-
   return (
-    <BrowserRouter>
-      {/* 🟢 3. Đặt Toaster ở đây để popup thông báo có thể đè lên mọi trang */}
-      <Toaster
-        position="top-right"
-        reverseOrder={false}
-        toastOptions={{
-          duration: 5000,
-          style: {
-            background: '#1e293b', // Hợp với theme dark của bạn
-            color: '#fff',
-            border: '1px solid #334155',
-          },
-        }}
-      />
+    <DeviceProvider>
+      <Router>
+        {/* 🟢 2. ĐẶT TOASTER Ở ĐÂY ĐỂ NÓ HOẠT ĐỘNG TOÀN CỤC */}
+        <Toaster
+          position="top-center"
+          toastOptions={{
+            style: {
+              background: '#1e293b', // bg-slate-800
+              color: '#fff',
+              borderRadius: '16px',
+              border: '1px solid #334155', // border-slate-700
+            }
+          }}
+        />
 
-      <Routes>
-        <Route path="/" element={<MainLayout />}>
-          <Route index element={<Dashboard />} />
-          <Route path="control" element={<ControlPanel />} />
-          <Route path="analytics" element={<Analytics />} />
-          <Route path="settings" element={<Settings />} />
-          <Route path="blockchain" element={<BlockchainHistory />} /> {/* Sửa lại path bỏ dấu / ở đầu cho chuẩn nested route */}
-        </Route>
-      </Routes>
-    </BrowserRouter>
+        <Routes>
+          <Route path="/" element={<MainLayout />}>
+            <Route index element={<Navigate to="/dashboard" replace />} />
+            <Route path="dashboard" element={<Dashboard />} />
+            <Route path="control" element={<ControlPanel />} />
+            <Route path="analytics" element={<Analytics />} />
+            <Route path="blockchain" element={<BlockchainHistory />} />
+            <Route path="settings" element={<Settings />} />
+          </Route>
+        </Routes>
+      </Router>
+    </DeviceProvider>
   );
 }
 

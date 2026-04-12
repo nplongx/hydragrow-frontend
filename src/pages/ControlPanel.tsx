@@ -9,7 +9,6 @@ import {
 
 import { invoke } from '@tauri-apps/api/core';
 import toast from 'react-hot-toast';
-import { useDeviceControl } from '../hooks/useDeviceControl';
 
 import { ControlCard } from '../components/ui/ControlCard';
 import { FsmStatusBadge } from '../components/ui/FsmStatusBadge';
@@ -17,6 +16,7 @@ import { FsmStatusBadge } from '../components/ui/FsmStatusBadge';
 // 3. 🟢 IMPORT THÊM TYPE PUMPSTATUS VÀO ĐÂY
 import { PumpStatus } from '../types/models';
 import { useDeviceContext } from '../context/DeviceContext';
+import { useDeviceControl } from '../hooks/useDeviceControl';
 
 const CONSTANTS = {
   EC_GAIN_PER_ML: 0.015,

@@ -2,6 +2,7 @@ import { createContext, useContext, useState, useEffect, useCallback, ReactNode 
 import { invoke } from '@tauri-apps/api/core';
 import { fetch } from '@tauri-apps/plugin-http';
 import { SensorData, StatusPayload } from '../types/models';
+import toast from 'react-hot-toast';
 
 interface DeviceContextType {
   deviceId: string | null;
@@ -78,10 +79,41 @@ export const DeviceProvider = ({ children }: { children: ReactNode }) => {
           const data = JSON.parse(event.data);
 
           if (data.type === 'alert') {
-            if (data.payload.title === 'Trạng thái thiết bị') {
-              setDeviceStatus({ is_online: data.payload.level === 'success', last_seen: '' });
-            } else if (data.payload.level === 'FSM_UPDATE') {
-              setFsmState(data.payload.message);
+            const alert = data.payload;
+
+            // A. Bắt trạng thái Online/Offline
+            if (alert.title === 'Trạng thái thiết bị') {
+              const isOnline = alert.level === 'success';
+              setDeviceStatus({ is_online: isOnline, last_seen: '' });
+
+              // 🟢 THÊM: Thông báo khi thiết bị kết nối/mất kết nối
+              if (isOnline) toast.success("Thiết bị đã trực tuyến trở lại!");
+              else toast.error("Mất kết nối với thiết bị!");
+              return;
+            }
+
+            // B. Bắt trạng thái FSM ẩn (Để update UI)
+            if (alert.level === 'FSM_UPDATE') {
+              setFsmState(alert.message);
+              return;
+            }
+
+            // C. 🟢 XỬ LÝ CÁC CẢNH BÁO TOÀN CỤC (Lỗi, Dừng khẩn cấp, Ghi Blockchain...)
+            switch (alert.level) {
+              case 'critical':
+                toast.error(`🚨 ${alert.title}\n${alert.message}`, { duration: 10000 });
+                break;
+              case 'warning':
+                toast.error(`⚠️ ${alert.title}\n${alert.message}`, { duration: 6000 });
+                break;
+              case 'success':
+                toast.success(`✅ ${alert.title}\n${alert.message}`, { duration: 5000 });
+                break;
+              case 'info':
+              default:
+                // Các thông báo info (ví dụ: đang xả nước, cấp nước...)
+                toast(`ℹ️ ${alert.title}`, { duration: 4000 });
+                break;
             }
             return;
           }

@@ -1,72 +1,140 @@
-// src/pages/BlockchainHistory.tsx
 import { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { fetch } from '@tauri-apps/plugin-http'; // <--- Import Native HTTP
-import { ShieldCheck, Clock, ExternalLink, Box, Server, AlertTriangle } from 'lucide-react';
-
-const DEVICE_ID = "device_001"; // Hardcode tạm cho demo
+import { fetch } from '@tauri-apps/plugin-http';
+import {
+  ShieldCheck, Clock, ExternalLink, Box, Server,
+  AlertTriangle, Settings, Calendar, ChevronDown
+} from 'lucide-react';
+import toast from 'react-hot-toast';
 
 interface BlockchainRecord {
   id: number;
   device_id: string;
+  season_id?: string;
   action: string;
   tx_id: string;
   created_at: string;
 }
 
+interface CropSeason {
+  id: string;
+  name: string;
+  status: 'active' | 'completed';
+  start_time: string;
+  end_time?: string;
+}
+
 const BlockchainHistory = () => {
+  const [appConfig, setAppConfig] = useState<any>(null);
+  const [deviceId, setDeviceId] = useState<string | null>(null);
+
+  // States cho Vụ Mùa & Lịch sử
+  const [seasons, setSeasons] = useState<CropSeason[]>([]);
+  const [selectedSeason, setSelectedSeason] = useState<string | null>(null);
   const [history, setHistory] = useState<BlockchainRecord[]>([]);
+
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // 1. Tải cấu hình và lấy danh sách Vụ Mùa
   useEffect(() => {
-    fetchHistory();
+    const init = async () => {
+      try {
+        const settings: any = await invoke('load_settings').catch(() => null);
+        if (settings && settings.device_id) {
+          setAppConfig(settings);
+          setDeviceId(settings.device_id);
+          await fetchSeasons(settings.device_id, settings.backend_url, settings.api_key);
+        } else {
+          setIsLoading(false);
+        }
+      } catch (err) {
+        console.error("Lỗi khi tải cấu hình:", err);
+        setIsLoading(false);
+      }
+    };
+    init();
   }, []);
 
-  const fetchHistory = async () => {
+  // 2. Fetch danh sách vụ mùa (Có fallback mock data nếu Backend chưa code xong API)
+  const fetchSeasons = async (devId: string, backendUrl: string, apiKey: string) => {
+    try {
+      const url = `${backendUrl}/api/seasons?device_id=${devId}`;
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json', 'X-API-Key': apiKey }
+      });
+
+      if (!response.ok) throw new Error("API chưa sẵn sàng");
+
+      const resData = await response.json();
+      const actualData = resData.data ? resData.data : resData;
+      setSeasons(actualData);
+      if (actualData.length > 0) setSelectedSeason(actualData[0].id);
+
+    } catch (err) {
+      // 🟢 MOCK DATA FALLBACK: Hiển thị tạm khi Backend chưa có bảng crop_seasons
+      console.warn("Dùng dữ liệu giả lập cho Vụ mùa (Do API chưa sẵn sàng).");
+      const mockSeasons: CropSeason[] = [
+        { id: 'SS-2026-04', name: 'Vụ Hè 2026 - Dưa Lưới', status: 'active', start_time: '2026-04-01T00:00:00Z' },
+        { id: 'SS-2026-01', name: 'Vụ Xuân 2026 - Dâu Tây', status: 'completed', start_time: '2026-01-10T00:00:00Z', end_time: '2026-03-25T00:00:00Z' }
+      ];
+      setSeasons(mockSeasons);
+      setSelectedSeason(mockSeasons[0].id);
+    }
+  };
+
+  // 3. Lắng nghe sự thay đổi của Vụ Mùa để tải lại Lịch sử Blockchain
+  useEffect(() => {
+    if (appConfig && selectedSeason) {
+      fetchHistory(appConfig.device_id, appConfig.backend_url, appConfig.api_key, selectedSeason);
+    }
+  }, [selectedSeason, appConfig]);
+
+  // 4. Gọi API lấy lịch sử Blockchain CÓ LỌC THEO VỤ MÙA
+  const fetchHistory = async (devId: string, backendUrl: string, apiKey: string, seasonId: string) => {
     setIsLoading(true);
     setError(null);
     try {
-      // Lấy cấu hình máy chủ từ Store
-      const settings: any = await invoke('load_settings').catch(() => null);
-      if (!settings || !settings.backend_url) {
-        throw new Error("Chưa cấu hình URL máy chủ. Vui lòng vào Cài đặt.");
-      }
+      if (!backendUrl) throw new Error("Chưa cấu hình URL máy chủ.");
 
-      const url = `${settings.backend_url}/api/blockchain/devices/${DEVICE_ID}`;
+      // 🟢 Gắn season_id vào URL
+      const url = `${backendUrl}/api/blockchain/devices/${devId}?season_id=${seasonId}`;
       const response = await fetch(url, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
-          'X-API-Key': settings.api_key
+          'X-API-Key': apiKey
         }
       });
 
       if (!response.ok) throw new Error(`Lỗi máy chủ: HTTP ${response.status}`);
 
       const resData = await response.json();
-      // Bóc vỏ data 
       const actualData = resData.data ? resData.data : resData;
       setHistory(actualData);
     } catch (err: any) {
       console.error("Lỗi tải lịch sử blockchain:", err);
-      setError(err.message || (typeof err === 'string' ? err : "Không thể tải dữ liệu"));
+      const errMsg = err.message || (typeof err === 'string' ? err : "Không thể tải dữ liệu");
+      setError(errMsg);
+      toast.error(errMsg);
     } finally {
       setIsLoading(false);
     }
   };
 
+  // 5. API xác thực Transaction On-chain
   const handleVerify = async (txId: string) => {
+    const toastId = toast.loading("Đang truy xuất thông tin xác thực trên Solana...");
     try {
-      const settings: any = await invoke('load_settings').catch(() => null);
-      if (!settings || !settings.backend_url) throw new Error("Missing config");
+      if (!appConfig || !appConfig.backend_url) throw new Error("Lỗi cấu hình hệ thống");
 
-      const url = `${settings.backend_url}/api/blockchain/verify/${txId}`;
+      const url = `${appConfig.backend_url}/api/blockchain/verify/${txId}`;
       const response = await fetch(url, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
-          'X-API-Key': settings.api_key
+          'X-API-Key': appConfig.api_key
         }
       });
 
@@ -75,100 +143,174 @@ const BlockchainHistory = () => {
       const resData = await response.json();
       const data = resData.data ? resData.data : resData;
 
-      // Mở trình duyệt web của OS để xem trên Solscan
-      window.open(data.verification_links.solscan, '_blank');
+      toast.success("Xác thực thành công! Đang mở trình duyệt...", { id: toastId });
+
+      setTimeout(() => {
+        window.open(data.verification_links.solscan, '_blank');
+      }, 500);
+
     } catch (err: any) {
-      alert("Lỗi khi lấy link xác thực: " + (err.message || err));
+      toast.error("Lỗi xác thực: " + (err.message || err), { id: toastId });
     }
   };
 
-  // Hàm rút gọn Transaction ID cho đỡ dài
   const truncateTx = (tx: string) => {
     if (!tx || tx.length < 15) return tx;
     return `${tx.slice(0, 6)}...${tx.slice(-6)}`;
   };
 
-  if (isLoading) {
+  const formatDate = (isoString: string) => {
+    return new Date(isoString).toLocaleDateString('vi-VN', {
+      day: '2-digit', month: '2-digit', year: 'numeric'
+    });
+  };
+
+  // Lấy thông tin vụ mùa đang được chọn
+  const activeSeasonData = seasons.find(s => s.id === selectedSeason);
+
+  // --- RENDERING ---
+
+  if (isLoading && !selectedSeason) {
     return (
-      <div className="flex flex-col items-center justify-center h-64 space-y-4">
+      <div className="flex flex-col items-center justify-center h-screen space-y-4 bg-slate-950">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-500"></div>
         <p className="text-sm text-slate-400 font-medium animate-pulse">Đang đồng bộ sổ cái Solana...</p>
       </div>
     );
   }
 
-  return (
-    <div className="p-4 space-y-6 animate-in fade-in duration-500 pb-24">
+  if (!deviceId) {
+    return (
+      <div className="flex flex-col items-center justify-center h-screen space-y-4 p-6 text-center animate-in fade-in bg-slate-950">
+        <div className="p-4 bg-slate-900 rounded-full border border-slate-800">
+          <Settings size={32} className="text-slate-400" />
+        </div>
+        <h2 className="text-xl font-bold text-white">Chưa cấu hình thiết bị</h2>
+        <p className="text-sm text-slate-400 max-w-xs">
+          Vui lòng vào mục Cài đặt để nhập Device ID trước khi xem lịch sử Blockchain.
+        </p>
+      </div>
+    );
+  }
 
-      {/* Header */}
-      <div className="flex items-start justify-between bg-slate-900/50 p-5 rounded-3xl border border-indigo-500/20 shadow-[0_0_20px_rgba(99,102,241,0.05)]">
+  return (
+    <div className="p-4 md:p-6 space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-24 max-w-4xl mx-auto">
+
+      {/* HEADER & CHỌN VỤ MÙA TÁI THIẾT KẾ */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between bg-slate-900/50 p-5 rounded-3xl border border-indigo-500/20 shadow-[0_0_20px_rgba(99,102,241,0.05)] backdrop-blur-md gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-white mb-1 flex items-center">
             <ShieldCheck className="text-indigo-400 mr-2" size={26} />
             Nhật Ký Niêm Phong
           </h1>
-          <p className="text-sm text-slate-400">
-            Dữ liệu thiết bị được mã hóa và lưu trữ vĩnh viễn trên mạng lưới Solana.
+          <p className="text-xs md:text-sm text-slate-400 mt-1">
+            Minh bạch dữ liệu canh tác. <span className="hidden sm:inline">Lưu trữ vĩnh viễn trên mạng Solana.</span>
           </p>
         </div>
-        <div className="hidden sm:flex items-center space-x-2 bg-indigo-500/10 px-3 py-1.5 rounded-full border border-indigo-500/20">
-          <Server size={14} className="text-indigo-400" />
-          <span className="text-xs font-semibold text-indigo-300">Solana Devnet</span>
+
+        {/* DROPDOWN CHỌN MẺ TRỒNG */}
+        <div className="relative min-w-[240px] shrink-0">
+          <label className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest mb-1.5 block ml-1">Lọc theo vụ mùa</label>
+          <div className="relative">
+            <select
+              value={selectedSeason || ''}
+              onChange={(e) => setSelectedSeason(e.target.value)}
+              className="w-full bg-slate-950 border border-slate-800 hover:border-indigo-500/50 text-white text-sm font-semibold rounded-2xl pl-4 pr-10 py-3.5 appearance-none focus:outline-none focus:ring-2 focus:ring-indigo-500/30 transition-all cursor-pointer"
+            >
+              {seasons.map(ss => (
+                <option key={ss.id} value={ss.id}>
+                  {ss.status === 'active' ? '🟢' : '📦'} {ss.name}
+                </option>
+              ))}
+            </select>
+            <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={18} />
+          </div>
         </div>
       </div>
 
+      {/* HIỂN THỊ THÔNG TIN VỤ MÙA ĐANG CHỌN */}
+      {activeSeasonData && (
+        <div className="flex items-center justify-between px-4 py-3 bg-indigo-500/5 border border-indigo-500/10 rounded-2xl">
+          <div className="flex items-center space-x-3">
+            <div className="p-2 bg-indigo-500/10 rounded-lg">
+              <Calendar size={18} className="text-indigo-400" />
+            </div>
+            <div>
+              <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Thời gian canh tác</p>
+              <p className="text-sm text-slate-300 font-medium">
+                {formatDate(activeSeasonData.start_time)} - {activeSeasonData.end_time ? formatDate(activeSeasonData.end_time) : 'Đang sinh trưởng'}
+              </p>
+            </div>
+          </div>
+          <div className="hidden sm:flex items-center space-x-2 bg-slate-900 px-3 py-1.5 rounded-full border border-slate-800 shrink-0">
+            <Server size={14} className="text-indigo-400" />
+            <span className="text-[11px] font-semibold text-slate-400">Solana Devnet</span>
+          </div>
+        </div>
+      )}
+
       {error && (
-        <div className="bg-red-500/10 border border-red-500/50 rounded-2xl p-4 flex items-start space-x-3 text-red-400">
+        <div className="bg-red-500/10 border border-red-500/30 rounded-2xl p-4 flex items-start space-x-3 text-red-400 animate-in fade-in">
           <AlertTriangle size={20} className="shrink-0 mt-0.5" />
           <span className="text-sm font-medium">{error}</span>
         </div>
       )}
 
       {/* Danh sách Timeline */}
-      <div className="space-y-4 relative">
-        {/* Đường line dọc chạy dọc theo danh sách */}
-        <div className="absolute left-6 top-4 bottom-4 w-px bg-slate-800 -z-10"></div>
+      <div className="space-y-6 relative pt-4">
+        {/* Đường line dọc */}
+        <div className="absolute left-6 top-8 bottom-0 w-px bg-slate-800 -z-10"></div>
 
-        {history.length === 0 && !error ? (
-          <div className="text-center py-10 text-slate-500 text-sm">Chưa có dữ liệu nào được niêm phong.</div>
+        {isLoading ? (
+          <div className="flex justify-center py-10">
+            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-indigo-500"></div>
+          </div>
+        ) : history.length === 0 && !error ? (
+          <div className="text-center py-10 bg-slate-900/30 rounded-3xl border border-dashed border-slate-800">
+            <Box size={32} className="mx-auto text-slate-600 mb-3" />
+            <p className="text-slate-500 text-sm font-medium">Chưa có dữ liệu nào được niêm phong cho mẻ trồng này.</p>
+          </div>
         ) : (
           history.map((record, index) => (
-            <div key={record.id || index} className="flex items-start space-x-4">
+            <div key={record.id || index} className="flex items-start space-x-4 animate-in slide-in-from-right-4 duration-500" style={{ animationDelay: `${index * 50}ms` }}>
 
               {/* Icon / Node trên timeline */}
-              <div className="shrink-0 mt-1">
-                <div className="h-12 w-12 rounded-full bg-slate-900 border-2 border-slate-700 flex items-center justify-center shadow-lg">
-                  <Box size={20} className="text-indigo-400" />
+              <div className="shrink-0">
+                <div className="h-12 w-12 rounded-full bg-slate-900 border-4 border-slate-950 flex items-center justify-center shadow-lg relative z-10">
+                  <Box size={18} className="text-indigo-400" />
                 </div>
               </div>
 
               {/* Card nội dung */}
-              <div className="flex-1 bg-slate-900/80 backdrop-blur-sm border border-slate-800 rounded-2xl p-4 hover:border-indigo-500/30 transition-colors group">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex-1 bg-slate-900/80 backdrop-blur-md border border-slate-800 rounded-2xl p-4 hover:border-indigo-500/40 transition-all hover:shadow-[0_0_20px_rgba(99,102,241,0.1)] group">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
 
                   <div>
-                    <h4 className="text-white font-semibold text-sm capitalize">
+                    <h4 className="text-white font-bold text-sm capitalize tracking-wide">
                       {record.action.replace(/_/g, ' ')}
                     </h4>
-                    <div className="flex items-center space-x-3 mt-1.5 text-xs text-slate-400">
+                    <div className="flex items-center space-x-3 mt-1.5 text-xs text-slate-400 font-medium">
                       <span className="flex items-center">
-                        <Clock size={12} className="mr-1" />
-                        {new Date(record.created_at).toLocaleString('vi-VN')}
+                        <Clock size={12} className="mr-1.5" />
+                        {new Date(record.created_at).toLocaleString('vi-VN', {
+                          hour: '2-digit', minute: '2-digit', second: '2-digit',
+                          day: '2-digit', month: '2-digit', year: 'numeric'
+                        })}
                       </span>
                     </div>
                   </div>
 
                   {/* Phần hiển thị Tx và Nút check */}
-                  <div className="flex items-center bg-slate-950 rounded-xl p-1.5 border border-slate-800">
-                    <span className="px-3 font-mono text-[11px] text-slate-400">
+                  <div className="flex items-center bg-slate-950 rounded-xl p-1.5 border border-slate-800/80 self-start md:self-auto shrink-0">
+                    <span className="px-3 font-mono text-[11px] text-slate-400 select-all">
                       {truncateTx(record.tx_id)}
                     </span>
                     <button
                       onClick={() => handleVerify(record.tx_id)}
-                      className="flex items-center space-x-1 bg-indigo-500 hover:bg-indigo-400 text-white px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors shadow-lg shadow-indigo-500/20"
+                      className="flex items-center space-x-1.5 bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-lg shadow-indigo-500/20 active:scale-95"
                     >
                       <ExternalLink size={12} />
-                      <span>Xác thực</span>
+                      <span>Xác Thực</span>
                     </button>
                   </div>
 
