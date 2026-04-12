@@ -1,9 +1,44 @@
 // src/pages/Dashboard.tsx
 import { useState, useEffect } from 'react';
-import { Droplets, Thermometer, Activity, Waves, Settings } from 'lucide-react';
+import { Droplets, Thermometer, Activity, Waves, Settings, Tag } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 import { useDeviceSensor } from '../hooks/useDeviceSensor';
 import { useDeviceControl } from '../hooks/useDeviceControl';
+
+// Hàm helper dịch trạng thái
+const renderFsmState = (rawState: string) => {
+  if (rawState.startsWith("SystemFault:")) {
+    const reason = rawState.replace("SystemFault:", "");
+    return <Tag color="error">🚨 Lỗi: {reason}</Tag>;
+  }
+
+  switch (rawState) {
+    case "Monitoring":
+      return <Tag color="success">🟢 Đang Giám Sát</Tag>;
+    case "EmergencyStop":
+      return <Tag color="error">🛑 DỪNG KHẨN CẤP</Tag>;
+    case "WaterRefilling":
+      return <Tag color="blue">💧 Đang Cấp Nước</Tag>;
+    case "WaterDraining":
+      return <Tag color="cyan">🌊 Đang Xả Nước</Tag>;
+    case "DosingPumpA":
+      return <Tag color="orange">🧪 Đang Châm Phân A</Tag>;
+    case "WaitingBetweenDose":
+      return <Tag color="default">⏳ Chờ Hòa Tan (Giữa A & B)</Tag>;
+    case "DosingPumpB":
+      return <Tag color="orange">🧪 Đang Châm Phân B</Tag>;
+    case "DosingPH":
+      return <Tag color="purple">⚖️ Đang Chỉnh pH</Tag>;
+    case "StartingOsakaPump":
+      return <Tag color="processing">⚙️ Đang Khởi Động Bơm</Tag>;
+    case "ActiveMixing":
+      return <Tag color="geekblue">🌪️ Đang Sục Trộn (Jet Mixing)</Tag>;
+    case "Stabilizing":
+      return <Tag color="warning">⚖️ Chờ Ổn Định Cảm Biến</Tag>;
+    default:
+      return <Tag color="default">{rawState || "Unknown"}</Tag>;
+  }
+};
 
 const Dashboard = () => {
   // Sửa giá trị khởi tạo thành null để tránh nháy giao diện hoặc load sai thiết bị ban đầu
@@ -59,7 +94,7 @@ const Dashboard = () => {
 const DashboardContent = ({ deviceId }: { deviceId: string }) => {
   const { isProcessing, togglePump } = useDeviceControl(deviceId);
   // Đã sửa lỗi hardcode "device_001" thành biến deviceId
-  const { sensorData, deviceStatus, isLoading, updatePumpStatusOptimistically } = useDeviceSensor(deviceId);
+  const { sensorData, deviceStatus, isLoading, updatePumpStatusOptimistically, fsmState } = useDeviceSensor(deviceId);
 
   if (isLoading || !sensorData) {
     return (
@@ -106,6 +141,14 @@ const DashboardContent = ({ deviceId }: { deviceId: string }) => {
               {deviceStatus?.is_online ? `Hoạt động tốt • ${deviceId}` : `Mất kết nối • ${deviceId}`}
             </span>
           </div>
+        </div>
+      </div>
+
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex items-center justify-between">
+        <span className="text-sm font-medium text-slate-400">Trạng thái hệ thống:</span>
+        <div className="state-display">
+          {/* Thay đổi deviceStatus?.current_state thành biến chứa state thực tế của bạn nếu cần */}
+          {renderFsmState(fsmState)}
         </div>
       </div>
 
@@ -172,8 +215,8 @@ const DashboardContent = ({ deviceId }: { deviceId: string }) => {
             disabled={isProcessing || !deviceStatus?.is_online}
             onClick={() => handleToggle("WATER_PUMP", pumps.WATER_PUMP)}
             className={`flex-1 py-3 rounded-2xl font-semibold transition-all active:scale-95 disabled:opacity-50 disabled:active:scale-100 flex items-center justify-center space-x-2 ${isWaterPumpOn
-                ? 'bg-rose-500 hover:bg-rose-600 text-white shadow-[0_0_15px_rgba(244,63,94,0.4)]'
-                : 'bg-emerald-500 hover:bg-emerald-600 text-white'
+              ? 'bg-rose-500 hover:bg-rose-600 text-white shadow-[0_0_15px_rgba(244,63,94,0.4)]'
+              : 'bg-emerald-500 hover:bg-emerald-600 text-white'
               }`}
           >
             {isProcessing ? (
@@ -189,8 +232,8 @@ const DashboardContent = ({ deviceId }: { deviceId: string }) => {
             disabled={isProcessing || !deviceStatus?.is_online}
             onClick={() => handleToggle("DRAIN_PUMP", pumps.DRAIN_PUMP)}
             className={`flex-1 py-3 rounded-2xl font-semibold transition-all active:scale-95 disabled:opacity-50 disabled:active:scale-100 flex items-center justify-center space-x-2 border ${isDrainPumpOn
-                ? 'bg-rose-500 border-rose-500 hover:bg-rose-600 text-white shadow-[0_0_15px_rgba(244,63,94,0.4)]'
-                : 'bg-slate-800 border-slate-700 hover:bg-slate-700 text-white'
+              ? 'bg-rose-500 border-rose-500 hover:bg-rose-600 text-white shadow-[0_0_15px_rgba(244,63,94,0.4)]'
+              : 'bg-slate-800 border-slate-700 hover:bg-slate-700 text-white'
               }`}
           >
             {isProcessing ? (

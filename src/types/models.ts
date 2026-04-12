@@ -133,4 +133,34 @@ export interface UnifiedDeviceConfig {
   enable_ph_sensor: boolean;
   enable_water_level_sensor: boolean;
   enable_temp_sensor: boolean;
+
+  dosing_pwm_percent: number;
+  osaka_mixing_pwm_percent: number;
+  osaka_misting_pwm_percent: number;
+}
+
+// src/types/models.ts
+
+// Cập nhật các trạng thái FSM mới nhất từ ESP32
+export type SystemState =
+  | "Monitoring"
+  | "EmergencyStop"
+  | "WaterRefilling"
+  | "WaterDraining"
+  | "DosingPumpA"
+  | "WaitingBetweenDose"
+  | "DosingPumpB"
+  | "DosingPH"
+  | "StartingOsakaPump"
+  | "ActiveMixing"
+  | "Stabilizing"
+  // Thêm [key: string] để bắt các lỗi linh động dạng "SystemFault:Lý_do"
+  | string;
+
+export interface AlertMessage {
+  level: "info" | "success" | "warning" | "critical";
+  title: string;
+  message: string;
+  device_id: string;
+  timestamp: number;
 }
