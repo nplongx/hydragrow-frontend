@@ -19,6 +19,8 @@ export const DeviceProvider = ({ children }: { children: ReactNode }) => {
   const [deviceId, setDeviceId] = useState<string | null>(null);
   const [settings, setSettings] = useState<any>(null);
   const [sensorData, setSensorData] = useState<SensorData | null>(null);
+
+  // 🟢 Mặc định luôn là OFFLINE khi vừa mở app
   const [deviceStatus, setDeviceStatus] = useState<StatusPayload>({ is_online: false, last_seen: '' });
   const [fsmState, setFsmState] = useState<string>("Monitoring");
   const [isLoading, setIsLoading] = useState(true);
@@ -50,7 +52,7 @@ export const DeviceProvider = ({ children }: { children: ReactNode }) => {
     const setupConnection = async () => {
       setIsLoading(true);
       try {
-        // Lấy data khởi tạo
+        // Lấy data khởi tạo (Số liệu cũ cuối cùng trước khi mạch tắt)
         const url = `${settings.backend_url}/api/devices/${deviceId}/sensors/latest`;
         const response = await fetch(url, {
           method: 'GET',
@@ -60,7 +62,10 @@ export const DeviceProvider = ({ children }: { children: ReactNode }) => {
         if (response.ok) {
           const resData = await response.json();
           setSensorData(resData.data || resData);
-          setDeviceStatus({ is_online: true, last_seen: '' });
+
+          // 🟢 ĐÃ FIX LỖI ẢO TƯỞNG ONLINE: 
+          // KHÔNG set is_online = true ở đây nữa vì đây chỉ là dữ liệu lịch sử trong SQLite.
+          // App vẫn sẽ giữ trạng thái OFFLINE cho đến khi WS nhận được dữ liệu Live.
         }
       } catch (err) {
         console.warn("Chưa lấy được data khởi tạo:", err);
@@ -72,21 +77,21 @@ export const DeviceProvider = ({ children }: { children: ReactNode }) => {
       const wsUrl = `${cleanBaseUrl.replace(/^http/, 'ws')}/ws?device_id=${deviceId}&api_key=${settings.api_key}`;
       ws = new WebSocket(wsUrl);
 
-      ws.onopen = () => console.log('🟢 [GlobalContext] Đã kết nối WebSocket');
+      ws.onopen = () => console.log('🟢 [GlobalContext] Đã kết nối tới Server WebSocket');
 
       ws.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
 
+          // XỬ LÝ CÁC GÓI TIN DẠNG ALERT
           if (data.type === 'alert') {
             const alert = data.payload;
 
-            // A. Bắt trạng thái Online/Offline
+            // A. Bắt trạng thái Online/Offline từ FSM ESP32 gửi lên
             if (alert.title === 'Trạng thái thiết bị') {
               const isOnline = alert.level === 'success';
               setDeviceStatus({ is_online: isOnline, last_seen: '' });
 
-              // 🟢 THÊM: Thông báo khi thiết bị kết nối/mất kết nối
               if (isOnline) toast.success("Thiết bị đã trực tuyến trở lại!");
               else toast.error("Mất kết nối với thiết bị!");
               return;
@@ -98,7 +103,7 @@ export const DeviceProvider = ({ children }: { children: ReactNode }) => {
               return;
             }
 
-            // C. 🟢 XỬ LÝ CÁC CẢNH BÁO TOÀN CỤC (Lỗi, Dừng khẩn cấp, Ghi Blockchain...)
+            // C. XỬ LÝ CÁC CẢNH BÁO TOÀN CỤC
             switch (alert.level) {
               case 'critical':
                 toast.error(`🚨 ${alert.title}\n${alert.message}`, { duration: 10000 });
@@ -111,15 +116,18 @@ export const DeviceProvider = ({ children }: { children: ReactNode }) => {
                 break;
               case 'info':
               default:
-                // Các thông báo info (ví dụ: đang xả nước, cấp nước...)
                 toast(`ℹ️ ${alert.title}`, { duration: 4000 });
                 break;
             }
             return;
           }
 
+          // 🟢 XỬ LÝ DỮ LIỆU CẢM BIẾN LIVE
           if (data.type === 'sensor_update') {
             setSensorData(data.payload.data || data.payload);
+
+            // 🟢 TỰ ĐỘNG BẬT ONLINE NẾU NHẬN ĐƯỢC DATA LIVE:
+            // Chỉ khi ESP32 đang chạy và bắn data mới, mạch mới được tính là Online.
             setDeviceStatus(prev => !prev.is_online ? { is_online: true, last_seen: new Date().toISOString() } : prev);
           }
         } catch (err) {
@@ -140,7 +148,7 @@ export const DeviceProvider = ({ children }: { children: ReactNode }) => {
     };
   }, [deviceId, settings]);
 
-  // Cập nhật giao diện mượt mà
+  // Cập nhật giao diện mượt mà (Optimistic UI)
   const updatePumpStatusOptimistically = useCallback((pumpId: string, action: 'on' | 'off') => {
     setSensorData(prevData => {
       if (!prevData) return prevData;

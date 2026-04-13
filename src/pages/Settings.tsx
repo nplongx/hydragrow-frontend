@@ -5,9 +5,9 @@ import {
 } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 import { fetch } from '@tauri-apps/plugin-http';
-import toast from 'react-hot-toast'; // Đã đồng bộ thư viện Toast
+import toast from 'react-hot-toast';
 
-// 🟢 IMPORT CÁC COMPONENT DÙNG CHUNG
+// IMPORT CÁC COMPONENT DÙNG CHUNG
 import { Switch } from '../components/ui/Switch';
 import { InputGroup } from '../components/ui/InputGroup';
 import { SubCard } from '../components/ui/SubCard';
@@ -86,86 +86,131 @@ const Settings = () => {
 
   const handleSave = async () => {
     setIsSaving(true);
-    const toastId = toast.loading("Đang lưu và đồng bộ với ESP32..."); // 🟢 Chuyển sang dùng react-hot-toast
+    const toastId = toast.loading("Đang lưu và đồng bộ với ESP32...");
 
     try {
       const devId = appSettings.device_id;
       try { await invoke('save_settings', { apiKey: appSettings.api_key, backendUrl: appSettings.backend_url, deviceId: devId }); } catch (e) { }
 
-      // const ts = new Date().toISOString();
-      //
-      // const devConf = {
-      //   device_id: devId, control_mode: config.control_mode, is_enabled: config.is_enabled ? 1 : 0,
-      //   ec_target: config.ec_target, ec_tolerance: config.ec_tolerance, ph_target: config.ph_target, ph_tolerance: config.ph_tolerance,
-      //   temp_target: config.temp_target, temp_tolerance: config.temp_tolerance, last_updated: ts,
-      //   pump_a_capacity_ml_per_sec: config.pump_a_capacity_ml_per_sec,
-      //   pump_b_capacity_ml_per_sec: config.pump_b_capacity_ml_per_sec,
-      //   delay_between_a_and_b_sec: config.delay_between_a_and_b_sec,
-      // };
-      //
-      // const waterConf = {
-      //   device_id: devId, water_level_min: config.water_level_min, water_level_target: config.water_level_target,
-      //   water_level_max: config.water_level_max, water_level_drain: config.water_level_drain,
-      //   circulation_mode: config.circulation_mode, circulation_on_sec: config.circulation_on_sec, circulation_off_sec: config.circulation_off_sec,
-      //   water_level_tolerance: config.water_level_tolerance, auto_refill_enabled: config.auto_refill_enabled ? 1 : 0,
-      //   auto_drain_overflow: config.auto_drain_overflow ? 1 : 0, auto_dilute_enabled: config.auto_dilute_enabled ? 1 : 0,
-      //   dilute_drain_amount_cm: config.dilute_drain_amount_cm, scheduled_water_change_enabled: config.scheduled_water_change_enabled ? 1 : 0,
-      //   water_change_interval_sec: config.water_change_interval_sec, scheduled_drain_amount_cm: config.scheduled_drain_amount_cm,
-      //   misting_on_duration_ms: config.misting_on_duration_ms, misting_off_duration_ms: config.misting_off_duration_ms, last_updated: ts
-      // };
-      //
-      // const safeConf = {
-      //   device_id: devId, emergency_shutdown: config.emergency_shutdown ? 1 : 0, max_ec_limit: config.max_ec_limit,
-      //   min_ec_limit: config.min_ec_limit, min_ph_limit: config.min_ph_limit, max_ph_limit: config.max_ph_limit,
-      //   max_ec_delta: config.max_ec_delta, max_ph_delta: config.max_ph_delta, max_dose_per_cycle: config.max_dose_per_cycle,
-      //   cooldown_sec: config.cooldown_sec, max_dose_per_hour: config.max_dose_per_hour, water_level_critical_min: config.water_level_critical_min,
-      //   max_refill_cycles_per_hour: config.max_refill_cycles_per_hour, max_drain_cycles_per_hour: config.max_drain_cycles_per_hour,
-      //   max_refill_duration_sec: config.max_refill_duration_sec, max_drain_duration_sec: config.max_drain_duration_sec,
-      //   min_temp_limit: config.min_temp_limit, max_temp_limit: config.max_temp_limit, ec_ack_threshold: config.ec_ack_threshold,
-      //   ph_ack_threshold: config.ph_ack_threshold, water_ack_threshold: config.water_ack_threshold, last_updated: ts
-      // };
-      //
-      // const doseConf = {
-      //   device_id: devId, tank_volume_l: config.tank_volume_l, ec_gain_per_ml: config.ec_gain_per_ml,
-      //   ph_shift_up_per_ml: config.ph_shift_up_per_ml, ph_shift_down_per_ml: config.ph_shift_down_per_ml,
-      //   active_mixing_sec: config.active_mixing_sec, sensor_stabilize_sec: config.sensor_stabilize_sec,
-      //   ec_step_ratio: config.ec_step_ratio, ph_step_ratio: config.ph_step_ratio,
-      //   dosing_pump_capacity_ml_per_sec: config.dosing_pump_capacity_ml_per_sec, soft_start_duration: config.soft_start_duration,
-      //   scheduled_mixing_interval_sec: config.scheduled_mixing_interval_sec, scheduled_mixing_duration_sec: config.scheduled_mixing_duration_sec,
-      //   dosing_pwm_percent: config.dosing_pwm_percent,
-      //   osaka_mixing_pwm_percent: config.osaka_mixing_pwm_percent,
-      //   osaka_misting_pwm_percent: config.osaka_misting_pwm_percent,
-      //   last_calibrated: ts
-      // };
-      //
-      // const sensConf = {
-      //   device_id: devId, ph_v7: config.ph_v7, ph_v4: config.ph_v4, ec_factor: config.ec_factor,
-      //   ec_offset: config.ec_offset, temp_offset: config.temp_offset, temp_compensation_beta: config.temp_compensation_beta,
-      //   sampling_interval: config.sampling_interval, publish_interval: config.publish_interval, moving_average_window: config.moving_average_window,
-      //   is_ph_enabled: config.enable_ph_sensor ? 1 : 0, is_ec_enabled: config.enable_ec_sensor ? 1 : 0,
-      //   is_temp_enabled: config.enable_temp_sensor ? 1 : 0, is_water_level_enabled: config.enable_water_level_sensor ? 1 : 0,
-      //   last_calibrated: ts
-      // };
+      const ts = new Date().toISOString();
 
-      const unifiedConfig = {
+      // 🟢 FIX 400: SQLite và Rust SQLx dùng Integer (1/0) thay vì Boolean (true/false).
+      const devConf = {
         device_id: devId,
-        ...config // Chứa toàn bộ ec_target, ph_target, misting_on_duration_ms,...
+        control_mode: config.control_mode,
+        is_enabled: config.is_enabled ? 1 : 0,
+        ec_target: Number(config.ec_target),
+        ec_tolerance: Number(config.ec_tolerance),
+        ph_target: Number(config.ph_target),
+        ph_tolerance: Number(config.ph_tolerance),
+        temp_target: Number(config.temp_target),
+        temp_tolerance: Number(config.temp_tolerance),
+        last_updated: ts,
+        pump_a_capacity_ml_per_sec: Number(config.pump_a_capacity_ml_per_sec),
+        pump_b_capacity_ml_per_sec: Number(config.pump_b_capacity_ml_per_sec),
+        delay_between_a_and_b_sec: Number(config.delay_between_a_and_b_sec),
       };
 
-      await callApi(`/api/devices/${devId}/config/unified`, 'PUT', unifiedConfig);
+      const waterConf = {
+        device_id: devId,
+        water_level_min: Number(config.water_level_min),
+        water_level_target: Number(config.water_level_target),
+        water_level_max: Number(config.water_level_max),
+        water_level_drain: Number(config.water_level_drain),
+        circulation_mode: config.circulation_mode,
+        circulation_on_sec: Number(config.circulation_on_sec),
+        circulation_off_sec: Number(config.circulation_off_sec),
+        water_level_tolerance: Number(config.water_level_tolerance),
+        auto_refill_enabled: config.auto_refill_enabled ? 1 : 0,
+        auto_drain_overflow: config.auto_drain_overflow ? 1 : 0,
+        auto_dilute_enabled: config.auto_dilute_enabled ? 1 : 0,
+        dilute_drain_amount_cm: Number(config.dilute_drain_amount_cm),
+        scheduled_water_change_enabled: config.scheduled_water_change_enabled ? 1 : 0,
+        water_change_interval_sec: Number(config.water_change_interval_sec),
+        scheduled_drain_amount_cm: Number(config.scheduled_drain_amount_cm),
+        misting_on_duration_ms: Number(config.misting_on_duration_ms),
+        misting_off_duration_ms: Number(config.misting_off_duration_ms),
+        last_updated: ts
+      };
 
-      // await Promise.all([
-      //   callApi(`/api/devices/${devId}/config`, 'PUT', devConf),
-      //   callApi(`/api/devices/${devId}/config/safety`, 'POST', safeConf),
-      //   callApi(`/api/devices/${devId}/calibration/sensor`, 'POST', sensConf),
-      //   callApi(`/api/devices/${devId}/config/water`, 'POST', waterConf),
-      //   callApi(`/api/devices/${devId}/calibration/dosing`, 'POST', doseConf),
-      // ]);
-      //
-      toast.success('Đã lưu và đồng bộ với ESP32!', { id: toastId }); // 🟢 Cập nhật Toast thành công
+      const safeConf = {
+        device_id: devId,
+        emergency_shutdown: config.emergency_shutdown ? 1 : 0,
+        max_ec_limit: Number(config.max_ec_limit),
+        min_ec_limit: Number(config.min_ec_limit),
+        min_ph_limit: Number(config.min_ph_limit),
+        max_ph_limit: Number(config.max_ph_limit),
+        max_ec_delta: Number(config.max_ec_delta),
+        max_ph_delta: Number(config.max_ph_delta),
+        max_dose_per_cycle: Number(config.max_dose_per_cycle),
+        cooldown_sec: Number(config.cooldown_sec),
+        max_dose_per_hour: Number(config.max_dose_per_hour),
+        water_level_critical_min: Number(config.water_level_critical_min),
+        max_refill_cycles_per_hour: Number(config.max_refill_cycles_per_hour),
+        max_drain_cycles_per_hour: Number(config.max_drain_cycles_per_hour),
+        max_refill_duration_sec: Number(config.max_refill_duration_sec),
+        max_drain_duration_sec: Number(config.max_drain_duration_sec),
+        min_temp_limit: Number(config.min_temp_limit),
+        max_temp_limit: Number(config.max_temp_limit),
+        ec_ack_threshold: Number(config.ec_ack_threshold),
+        ph_ack_threshold: Number(config.ph_ack_threshold),
+        water_ack_threshold: Number(config.water_ack_threshold),
+        last_updated: ts
+      };
+
+      const doseConf = {
+        device_id: devId,
+        tank_volume_l: Number(config.tank_volume_l),
+        ec_gain_per_ml: Number(config.ec_gain_per_ml),
+        ph_shift_up_per_ml: Number(config.ph_shift_up_per_ml),
+        ph_shift_down_per_ml: Number(config.ph_shift_down_per_ml),
+        active_mixing_sec: Number(config.active_mixing_sec),
+        sensor_stabilize_sec: Number(config.sensor_stabilize_sec),
+        ec_step_ratio: Number(config.ec_step_ratio),
+        ph_step_ratio: Number(config.ph_step_ratio),
+        dosing_pump_capacity_ml_per_sec: Number(config.dosing_pump_capacity_ml_per_sec),
+        soft_start_duration: Number(config.soft_start_duration),
+        scheduled_mixing_interval_sec: Number(config.scheduled_mixing_interval_sec),
+        scheduled_mixing_duration_sec: Number(config.scheduled_mixing_duration_sec),
+        dosing_pwm_percent: Number(config.dosing_pwm_percent),
+        osaka_mixing_pwm_percent: Number(config.osaka_mixing_pwm_percent),
+        osaka_misting_pwm_percent: Number(config.osaka_misting_pwm_percent),
+        last_calibrated: ts
+      };
+
+      const sensConf = {
+        device_id: devId,
+        ph_v7: Number(config.ph_v7),
+        ph_v4: Number(config.ph_v4),
+        ec_factor: Number(config.ec_factor),
+        ec_offset: Number(config.ec_offset),
+        temp_offset: Number(config.temp_offset),
+        temp_compensation_beta: Number(config.temp_compensation_beta),
+        sampling_interval: Number(config.sampling_interval),
+        publish_interval: Number(config.publish_interval),
+        moving_average_window: Number(config.moving_average_window),
+        is_ph_enabled: config.enable_ph_sensor ? 1 : 0,
+        is_ec_enabled: config.enable_ec_sensor ? 1 : 0,
+        is_temp_enabled: config.enable_temp_sensor ? 1 : 0,
+        is_water_level_enabled: config.enable_water_level_sensor ? 1 : 0,
+        last_calibrated: ts
+      };
+
+      // Đóng gói thành 1 Payload Duy Nhất
+      const unifiedPayload = {
+        device_config: devConf,
+        water_config: waterConf,
+        safety_config: safeConf,
+        sensor_calibration: sensConf,
+        dosing_calibration: doseConf,
+      };
+
+      await callApi(`/api/devices/${devId}/config/unified`, 'PUT', unifiedPayload);
+
+      toast.success('Đã lưu và đồng bộ với ESP32!', { id: toastId });
     } catch (error: any) {
       console.error(error);
-      toast.error('Lỗi mạng hoặc không thể lưu cấu hình.', { id: toastId }); // 🟢 Cập nhật Toast lỗi
+      toast.error('Lỗi mạng hoặc dữ liệu không hợp lệ.', { id: toastId });
     } finally {
       setIsSaving(false);
     }

@@ -3,7 +3,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { fetch } from '@tauri-apps/plugin-http';
 import {
   ShieldCheck, Clock, ExternalLink, Box, Server,
-  AlertTriangle, Settings, Calendar, ChevronDown
+  AlertTriangle, Settings, Calendar, ChevronDown, Download // 🟢 Import thêm icon Download
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -73,7 +73,7 @@ const BlockchainHistory = () => {
       if (actualData.length > 0) setSelectedSeason(actualData[0].id);
 
     } catch (err) {
-      // 🟢 MOCK DATA FALLBACK: Hiển thị tạm khi Backend chưa có bảng crop_seasons
+      // MOCK DATA FALLBACK: Hiển thị tạm khi Backend chưa có bảng crop_seasons
       console.warn("Dùng dữ liệu giả lập cho Vụ mùa (Do API chưa sẵn sàng).");
       const mockSeasons: CropSeason[] = [
         { id: 'SS-2026-04', name: 'Vụ Hè 2026 - Dưa Lưới', status: 'active', start_time: '2026-04-01T00:00:00Z' },
@@ -98,7 +98,7 @@ const BlockchainHistory = () => {
     try {
       if (!backendUrl) throw new Error("Chưa cấu hình URL máy chủ.");
 
-      // 🟢 Gắn season_id vào URL
+      // Gắn season_id vào URL
       const url = `${backendUrl}/api/blockchain/devices/${devId}?season_id=${seasonId}`;
       const response = await fetch(url, {
         method: 'GET',
@@ -152,6 +152,42 @@ const BlockchainHistory = () => {
     } catch (err: any) {
       toast.error("Lỗi xác thực: " + (err.message || err), { id: toastId });
     }
+  };
+
+  // 🟢 6. HÀM XUẤT FILE CSV
+  const handleExportCSV = () => {
+    if (history.length === 0) {
+      toast.error("Không có dữ liệu để xuất!");
+      return;
+    }
+
+    // Tiêu đề các cột
+    const headers = ["ID", "Mã Thiết Bị", "Mã Vụ Mùa", "Hành Động", "Mã Giao Dịch (TxID)", "Thời Gian"];
+
+    // Convert dữ liệu thành dạng chuỗi CSV, bọc trong dấu ngoặc kép để tránh lỗi dấu phẩy
+    const csvRows = history.map(row => [
+      row.id,
+      row.device_id,
+      row.season_id || "",
+      row.action.replace(/_/g, ' '),
+      row.tx_id,
+      new Date(row.created_at).toLocaleString('vi-VN')
+    ].map(val => `"${val}"`).join(","));
+
+    // \uFEFF là BOM (Byte Order Mark) để báo cho Excel biết đây là file UTF-8 (đọc được Tiếng Việt)
+    const csvContent = "\uFEFF" + [headers.join(","), ...csvRows].join("\n");
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+
+    // Tạo thẻ <a> ẩn để kích hoạt tải xuống
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `nhat-ky-niem-phong-${selectedSeason || 'tat-ca'}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    toast.success("Đã xuất file CSV thành công!");
   };
 
   const truncateTx = (tx: string) => {
@@ -208,22 +244,37 @@ const BlockchainHistory = () => {
           </p>
         </div>
 
-        {/* DROPDOWN CHỌN MẺ TRỒNG */}
-        <div className="relative min-w-[240px] shrink-0">
-          <label className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest mb-1.5 block ml-1">Lọc theo vụ mùa</label>
-          <div className="relative">
-            <select
-              value={selectedSeason || ''}
-              onChange={(e) => setSelectedSeason(e.target.value)}
-              className="w-full bg-slate-950 border border-slate-800 hover:border-indigo-500/50 text-white text-sm font-semibold rounded-2xl pl-4 pr-10 py-3.5 appearance-none focus:outline-none focus:ring-2 focus:ring-indigo-500/30 transition-all cursor-pointer"
-            >
-              {seasons.map(ss => (
-                <option key={ss.id} value={ss.id}>
-                  {ss.status === 'active' ? '🟢' : '📦'} {ss.name}
-                </option>
-              ))}
-            </select>
-            <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={18} />
+        {/* 🟢 KHU VỰC NÚT XUẤT CSV VÀ DROPDOWN CHỌN MẺ TRỒNG */}
+        <div className="flex flex-row items-end gap-3 shrink-0">
+
+          {/* Nút Xuất CSV */}
+          <button
+            onClick={handleExportCSV}
+            disabled={history.length === 0}
+            className="flex items-center justify-center space-x-2 px-4 py-3.5 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-white text-sm font-semibold rounded-2xl transition-all border border-slate-700 active:scale-95"
+            title="Xuất dữ liệu ra Excel"
+          >
+            <Download size={18} className={history.length > 0 ? "text-emerald-400" : "text-slate-500"} />
+            <span className="hidden sm:inline">Xuất CSV</span>
+          </button>
+
+          {/* Dropdown Vụ Mùa */}
+          <div className="relative min-w-[200px] flex-1 sm:flex-none">
+            <label className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest mb-1.5 block ml-1">Lọc theo vụ mùa</label>
+            <div className="relative">
+              <select
+                value={selectedSeason || ''}
+                onChange={(e) => setSelectedSeason(e.target.value)}
+                className="w-full bg-slate-950 border border-slate-800 hover:border-indigo-500/50 text-white text-sm font-semibold rounded-2xl pl-4 pr-10 py-3.5 appearance-none focus:outline-none focus:ring-2 focus:ring-indigo-500/30 transition-all cursor-pointer"
+              >
+                {seasons.map(ss => (
+                  <option key={ss.id} value={ss.id}>
+                    {ss.status === 'active' ? '🟢' : '📦'} {ss.name}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={18} />
+            </div>
           </div>
         </div>
       </div>
