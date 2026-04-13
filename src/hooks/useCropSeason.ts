@@ -1,3 +1,4 @@
+// src/hooks/useCropSeason.ts
 import { useState, useEffect, useCallback } from 'react';
 import { fetch } from '@tauri-apps/plugin-http';
 import { CropSeason } from '../types/models';
@@ -15,21 +16,41 @@ export const useCropSeason = () => {
     'X-API-Key': settings?.api_key || ''
   }), [settings]);
 
+  // Hàm parse an toàn để fix lỗi Tauri Stream
+  const safeJsonParse = async (res: Response) => {
+    const text = await res.text();
+    if (!text || text.trim() === '') return null;
+    try {
+      return JSON.parse(text);
+    } catch (e) {
+      console.warn("Không thể parse JSON:", text);
+      return null;
+    }
+  };
+
   const loadSeasons = useCallback(async () => {
     if (!deviceId || !settings?.backend_url) return;
     setIsLoading(true);
     try {
       const baseUrl = `${settings.backend_url}/api/devices/${deviceId}/seasons`;
 
-      // Load active
+      // 1. Load active season
       const activeRes = await fetch(`${baseUrl}/active`, { method: 'GET', headers: getHeaders() });
-      const activeData = await activeRes.json();
-      setActiveSeason(activeData.data);
+      if (activeRes.ok) {
+        const activeData = await safeJsonParse(activeRes);
+        setActiveSeason(activeData?.data || null);
+      } else {
+        console.warn(`Lỗi API Active Season: ${activeRes.status}`);
+      }
 
-      // Load history
+      // 2. Load history
       const historyRes = await fetch(baseUrl, { method: 'GET', headers: getHeaders() });
-      const historyData = await historyRes.json();
-      setHistory(historyData.data || []);
+      if (historyRes.ok) {
+        const historyData = await safeJsonParse(historyRes);
+        setHistory(historyData?.data || []);
+      } else {
+        console.warn(`Lỗi API History: ${historyRes.status}`);
+      }
     } catch (error) {
       console.error("Lỗi tải dữ liệu mùa vụ:", error);
       toast.error("Không thể tải thông tin mùa vụ");
@@ -54,9 +75,12 @@ export const useCropSeason = () => {
         toast.success("Đã bắt đầu mùa vụ mới!");
         await loadSeasons();
         return true;
+      } else {
+        const err = await safeJsonParse(res);
+        toast.error(`Lỗi: ${err?.message || 'Không thể tạo mùa vụ'}`);
       }
     } catch (error) {
-      toast.error("Lỗi khi tạo mùa vụ");
+      toast.error("Lỗi mạng khi tạo mùa vụ");
     }
     return false;
   };
@@ -72,9 +96,12 @@ export const useCropSeason = () => {
         toast.success("Đã kết thúc mùa vụ hiện tại!");
         await loadSeasons();
         return true;
+      } else {
+        const err = await safeJsonParse(res);
+        toast.error(`Lỗi: ${err?.message || 'Không thể kết thúc mùa vụ'}`);
       }
     } catch (error) {
-      toast.error("Lỗi khi kết thúc mùa vụ");
+      toast.error("Lỗi mạng khi kết thúc mùa vụ");
     }
     return false;
   };
