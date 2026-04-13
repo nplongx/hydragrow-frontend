@@ -164,3 +164,13 @@ export interface AlertMessage {
   device_id: string;
   timestamp: number;
 }
+
+export interface CropSeason {
+  id: string;
+  device_id: string;
+  name: string;
+  plant_type: string | null;
+  start_time: string;
+  end_time: string | null;
+  status: 'active' | 'completed';
+}

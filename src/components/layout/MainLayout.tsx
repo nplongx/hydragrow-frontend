@@ -1,14 +1,22 @@
-// src/layouts/MainLayout.tsx (Hoặc đường dẫn tương ứng của bạn)
+// src/components/layout/MainLayout.tsx (Hoặc đường dẫn tương ứng của bạn)
 import { Outlet, NavLink } from 'react-router-dom';
-import { LayoutDashboard, SlidersHorizontal, LineChart, Settings, ShieldCheck } from 'lucide-react';
+import {
+  LayoutDashboard,
+  SlidersHorizontal,
+  LineChart,
+  Settings,
+  ShieldCheck,
+  Sprout // Thêm icon Sprout cho Mùa vụ
+} from 'lucide-react';
 
 const MainLayout = () => {
-  // Danh sách các tab điều hướng (Đã thêm tab Blockchain)
+  // Danh sách các tab điều hướng (Đã thêm tab Mùa vụ)
   const navItems = [
     { path: '/', icon: LayoutDashboard, label: 'Tổng quan' },
+    { path: '/crop-seasons', icon: Sprout, label: 'Mùa vụ' }, // <--- Thêm tab này
     { path: '/control', icon: SlidersHorizontal, label: 'Điều khiển' },
     { path: '/analytics', icon: LineChart, label: 'Phân tích' },
-    { path: '/blockchain', icon: ShieldCheck, label: 'Niêm phong' }, // Thêm dòng này
+    { path: '/blockchain', icon: ShieldCheck, label: 'Niêm phong' },
     { path: '/settings', icon: Settings, label: 'Cài đặt' },
   ];
 
@@ -23,7 +31,7 @@ const MainLayout = () => {
 
       {/* Bottom Navigation Bar */}
       <nav className="fixed bottom-0 w-full bg-slate-900/80 backdrop-blur-lg border-t border-slate-800 pb-safe pb-[calc(8px+env(safe-area-inset-bottom))]">
-        <div className="flex justify-around items-center h-16 px-1"> {/* Đổi px-2 thành px-1 để 5 tab có thêm không gian */}
+        <div className="flex justify-around items-center h-16 px-1">
           {navItems.map((item) => (
             <NavLink
               key={item.path}
@@ -33,7 +41,8 @@ const MainLayout = () => {
                 }`
               }
             >
-              <item.icon size={22} strokeWidth={2} /> {/* Thu nhỏ icon một xíu (từ 24 -> 22) để 5 tab nhìn thoáng hơn */}
+              {/* Thu nhỏ icon xuống 20 để 6 tab không bị quá chật */}
+              <item.icon size={20} strokeWidth={2} />
               <span className="text-[10px] font-medium truncate">{item.label}</span>
             </NavLink>
           ))}

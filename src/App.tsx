@@ -9,6 +9,7 @@ import { DeviceProvider } from './context/DeviceContext';
 // 🟢 1. IMPORT TOASTER TỪ REACT-HOT-TOAST
 import { Toaster } from 'react-hot-toast';
 import './App.css';
+import { CropSeasons } from './pages/CropSeasons';
 
 function App() {
   return (
@@ -34,6 +35,7 @@ function App() {
             <Route path="control" element={<ControlPanel />} />
             <Route path="analytics" element={<Analytics />} />
             <Route path="blockchain" element={<BlockchainHistory />} />
+            <Route path="/crop-seasons" element={<CropSeasons />} />
             <Route path="settings" element={<Settings />} />
           </Route>
         </Routes>

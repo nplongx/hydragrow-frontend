@@ -6,6 +6,7 @@ import toast from 'react-hot-toast';
 
 interface DeviceContextType {
   deviceId: string | null;
+  settings: any; // <--- THÊM DÒNG NÀY
   sensorData: SensorData | null;
   deviceStatus: StatusPayload;
   fsmState: string;
@@ -160,7 +161,7 @@ export const DeviceProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   return (
-    <DeviceContext.Provider value={{ deviceId, sensorData, deviceStatus, fsmState, isLoading, updatePumpStatusOptimistically }}>
+    <DeviceContext.Provider value={{ deviceId, sensorData, deviceStatus, fsmState, isLoading, updatePumpStatusOptimistically, settings }}>
       {children}
     </DeviceContext.Provider>
   );
