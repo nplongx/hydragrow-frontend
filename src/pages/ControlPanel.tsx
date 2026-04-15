@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   FlaskConical, Droplets, Waves, RotateCcw, CloudRain,
   Calculator, X, CheckCircle2, Activity, Settings, AlertTriangle
@@ -27,6 +27,7 @@ const ControlPanel = () => {
   const [deviceId, setDeviceId] = useState<string | null>(null);
   const [isLoadingSettings, setIsLoadingSettings] = useState(true);
 
+  // Lấy Device ID từ cấu hình hệ thống
   useEffect(() => {
     const fetchSettings = async () => {
       try {
@@ -72,18 +73,17 @@ const ControlPanelContent = ({ deviceId }: { deviceId: string }) => {
   const { sensorData, deviceStatus, fsmState, isLoading, updatePumpStatusOptimistically, settings } = useDeviceContext();
   const { isProcessing, togglePump, setPumpPwm, syncDeviceStatus } = useDeviceControl(deviceId);
 
-  // 🟢 THÊM STATE ĐỂ LƯU CẤU HÌNH CỦA THIẾT BỊ (ĐỂ CHECK AN TOÀN)
   const [deviceConfig, setDeviceConfig] = useState<any>(null);
-
   const isOnline = deviceStatus?.is_online || false;
 
+  // Sync thiết bị khi online
   useEffect(() => {
     if (isOnline) {
       syncDeviceStatus();
     }
   }, [isOnline]);
 
-  // 🟢 FETCH CONFIG CỦA MẠCH ĐỂ KIỂM TRA NGƯỠNG AN TOÀN
+  // Tải cấu hình từ mạch ESP32 về để check an toàn
   useEffect(() => {
     if (!deviceId || !settings?.backend_url) return;
     const fetchDeviceConfig = async () => {
@@ -112,7 +112,7 @@ const ControlPanelContent = ({ deviceId }: { deviceId: string }) => {
   const [manualPH, setManualPH] = useState({ current: 6.0, target: 6.0 });
   const [confirmStep, setConfirmStep] = useState(false);
 
-  // TRẠNG THÁI CHO POPUP CONFIRM CƯỠNG CHẾ
+  // 🟢 TRẠNG THÁI CHO POPUP CONFIRM CƯỠNG CHẾ
   const [forceConfirmModal, setForceConfirmModal] = useState<{
     isOpen: boolean;
     pumpId: string;
@@ -123,12 +123,12 @@ const ControlPanelContent = ({ deviceId }: { deviceId: string }) => {
   const pumps: Partial<PumpStatus> = sensorData?.pump_status || {};
   const isOsakaOn = pumps.osaka_pump === true;
 
-  // 🟢 HÀM KIỂM TRA NGUY HIỂM ĐÃ ĐƯỢC FIX CHUẨN 100%
-  const checkIsDangerous = () => {
-    // 1. Kiểm tra qua chuỗi FSM từ Backend
+  // 🟢 HÀM KIỂM TRA NGUY HIỂM (Được tối ưu để không bị lỗi undefined)
+  const checkIsDangerous = useCallback(() => {
+    // 1. Dựa vào trạng thái FSM (Chính xác nhất)
     if (fsmState.includes('Emergency') || fsmState.includes('Fault')) return true;
 
-    // 2. Tính toán độc lập trên UI dựa trên Sensor thực tế và Config thật
+    // 2. Dựa vào thông số môi trường thực tế
     if (!sensorData || !deviceConfig) return false;
 
     const water = Number(sensorData.water_level);
@@ -140,7 +140,7 @@ const ControlPanelContent = ({ deviceId }: { deviceId: string }) => {
     const isPhBad = deviceConfig.enable_ph_sensor && (ph <= Number(deviceConfig.min_ph_limit) || ph >= Number(deviceConfig.max_ph_limit));
 
     return isWaterCritical || isEcBad || isPhBad || deviceConfig.emergency_shutdown === true;
-  };
+  }, [fsmState, sensorData, deviceConfig]);
 
   const handleOpenSmartDosing = () => {
     if (!isOnline) return toast.error("Thiết bị đang Offline!");
@@ -179,60 +179,36 @@ const ControlPanelContent = ({ deviceId }: { deviceId: string }) => {
     };
   }, [tankVolume, manualEC, manualPH]);
 
-  // --- HANDLERS ---
-  const handleToggle = async (pumpId: string, action: 'on' | 'off' | boolean, _isLocked: boolean, currentPwm?: number, title?: string) => {
-    const isTurningOn = action === 'on' || action === true;
-    const name = title || pumpId;
-
-    if (isTurningOn && checkIsDangerous()) {
-      setForceConfirmModal({ isOpen: true, pumpId, title: name });
-      return;
-    }
-
-    executeToggle(pumpId, isTurningOn ? 'on' : 'off', currentPwm, name);
-  };
-
+  // --- CÁC HÀM THỰC THI GỬI LỆNH XUỐNG SERVER ---
   const executeToggle = async (pumpId: string, actionStr: 'on' | 'off' | 'force_on', currentPwm?: number, name?: string) => {
     const isTurningOn = actionStr === 'on' || actionStr === 'force_on';
-    updatePumpStatusOptimistically(pumpId, isTurningOn as any);
+
+    // Ghi đè UI lập tức để mượt mà
+    updatePumpStatusOptimistically(pumpId, isTurningOn);
     const toastId = toast.loading(`Đang gửi lệnh ${actionStr === 'force_on' ? 'CƯỠNG CHẾ BẬT' : (isTurningOn ? 'BẬT' : 'TẮT')} ${name}...`);
 
+    // Gửi lệnh xuống API (Cưỡng chế mặc định 120s)
     const success = await togglePump(pumpId, actionStr, currentPwm, actionStr === 'force_on' ? 120 : undefined);
 
     if (success) {
       toast.success(`Đã ${actionStr === 'force_on' ? 'CƯỠNG CHẾ BẬT' : (isTurningOn ? 'BẬT' : 'TẮT')} ${name}!`, { id: toastId });
     } else {
       toast.error(`Lỗi điều khiển ${name}.`, { id: toastId });
-      updatePumpStatusOptimistically(pumpId, (!isTurningOn) as any);
+      updatePumpStatusOptimistically(pumpId, !isTurningOn); // Trả lại state nếu lỗi
     }
-  };
-
-  const handlePwmChange = (pumpId: string, val: number) => {
-    setPwmValues(prev => ({ ...prev, [pumpId]: val }));
-  };
-
-  const handlePwmCommit = async (pumpId: string, val: number, title: string) => {
-    if (!isOnline) return;
-
-    if (val > 0 && checkIsDangerous()) {
-      setForceConfirmModal({ isOpen: true, pumpId, title, val });
-      return;
-    }
-
-    executePwmCommit(pumpId, val, title);
   };
 
   const executePwmCommit = async (pumpId: string, val: number, title: string, isForce: boolean = false) => {
     if (isForce) {
       const toastId = toast.loading(`Đang cưỡng chế chạy ${title} ở ${val}%...`);
-      updatePumpStatusOptimistically(pumpId, true as any);
+      updatePumpStatusOptimistically(pumpId, true);
       const success = await togglePump(pumpId, 'force_on', val, 120);
 
       if (success) {
         toast.success(`Đã CƯỠNG CHẾ chạy ${title} ở ${val}%!`, { id: toastId });
       } else {
         toast.error(`Lỗi điều khiển ${title}.`, { id: toastId });
-        updatePumpStatusOptimistically(pumpId, false as any);
+        updatePumpStatusOptimistically(pumpId, false);
         handlePwmChange(pumpId, 0);
       }
       return;
@@ -245,24 +221,60 @@ const ControlPanelContent = ({ deviceId }: { deviceId: string }) => {
     }
   };
 
-  // HÀM XÁC NHẬN TỪ MODAL POPUP
+  // --- CÁC EVENT HANDLERS TỪ GIAO DIỆN (NÚT BẤM / SLIDER) ---
+  const handleToggle = (pumpId: string, action: 'on' | 'off' | boolean, _isLocked: boolean, currentPwm?: number, title?: string) => {
+    const isTurningOn = action === 'on' || action === true;
+    const name = title || pumpId;
+
+    if (isTurningOn && checkIsDangerous()) {
+      // Dừng luồng hiện tại, mở Popup Confirm lên thay vì gửi lệnh ngay
+      setForceConfirmModal({ isOpen: true, pumpId, title: name, val: undefined });
+      return;
+    }
+
+    // Nếu bình thường thì gửi lệnh
+    executeToggle(pumpId, isTurningOn ? 'on' : 'off', currentPwm, name);
+  };
+
+  const handlePwmChange = (pumpId: string, val: number) => {
+    setPwmValues(prev => ({ ...prev, [pumpId]: val }));
+  };
+
+  const handlePwmCommit = (pumpId: string, val: number, title: string) => {
+    if (!isOnline) return;
+
+    if (val > 0 && checkIsDangerous()) {
+      // Dừng lại, mở Popup Confirm
+      setForceConfirmModal({ isOpen: true, pumpId, title, val });
+      return;
+    }
+
+    executePwmCommit(pumpId, val, title, false);
+  };
+
+  // --- XỬ LÝ POPUP BUTTONS (OK / HỦY) ---
   const confirmForceAction = () => {
     const { pumpId, title, val } = forceConfirmModal;
     setForceConfirmModal({ isOpen: false, pumpId: '', title: '' });
 
-    if (val !== undefined) {
-      executePwmCommit(pumpId, val, title, true);
-    } else {
-      executeToggle(pumpId, 'force_on', undefined, title);
-    }
+    // Dùng setTimeout nhỏ để tránh xung đột render của React khi đóng/mở UI
+    setTimeout(() => {
+      if (val !== undefined) {
+        executePwmCommit(pumpId, val, title, true);
+      } else {
+        executeToggle(pumpId, 'force_on', undefined, title);
+      }
+    }, 50);
   };
 
-  // HÀM HỦY TỪ MODAL POPUP
   const cancelForceAction = () => {
     const { pumpId, val } = forceConfirmModal;
     setForceConfirmModal({ isOpen: false, pumpId: '', title: '' });
+
     if (val !== undefined) {
       handlePwmChange(pumpId, 0);
+    } else {
+      updatePumpStatusOptimistically(pumpId, false);
     }
   };
 
@@ -312,7 +324,7 @@ const ControlPanelContent = ({ deviceId }: { deviceId: string }) => {
   }
 
   return (
-    <div className="p-4 md:p-6 space-y-6 pb-24 max-w-4xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500">
+    <div className="p-4 md:p-6 space-y-6 pb-24 max-w-4xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500 relative">
 
       {/* HEADER SECTION */}
       <div className="flex items-center justify-between bg-slate-900/50 p-4 rounded-3xl border border-slate-800/60 backdrop-blur-md">
@@ -403,17 +415,17 @@ const ControlPanelContent = ({ deviceId }: { deviceId: string }) => {
         </div>
       </section>
 
-      {/* 🟢 CUSTOM MODAL: CẢNH BÁO CƯỠNG CHẾ BẬT BƠM NẰM Ở ĐÂY */}
+      {/* 🟢 MODAL CẢNH BÁO CƯỠNG CHẾ BẬT BƠM */}
       {forceConfirmModal.isOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-slate-900 border border-red-900/50 rounded-3xl shadow-2xl max-w-sm w-full overflow-hidden">
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="bg-slate-900 border border-red-900/50 rounded-3xl shadow-2xl max-w-sm w-full overflow-hidden transform transition-all">
             <div className="p-6 text-center space-y-4">
               <div className="mx-auto bg-red-500/10 w-16 h-16 rounded-full flex items-center justify-center mb-4">
                 <AlertTriangle className="text-red-500" size={32} />
               </div>
               <h2 className="text-xl font-bold text-white">Cảnh báo An toàn!</h2>
               <p className="text-slate-400 text-sm">
-                Hệ thống phát hiện thông số môi trường đang ở mức nguy hiểm và đã ngắt bảo vệ.
+                Hệ thống phát hiện thông số môi trường đang ở ngưỡng nguy hiểm. Bơm đang bị khóa bảo vệ.
               </p>
               <p className="text-slate-300 text-sm font-medium">
                 Bạn có chắc chắn muốn <span className="text-red-400">CƯỠNG CHẾ CHẠY</span> <br />
