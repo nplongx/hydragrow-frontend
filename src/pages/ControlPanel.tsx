@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import {
   FlaskConical, Droplets, Waves, RotateCcw, CloudRain,
-  Calculator, X, CheckCircle2, Activity, Settings
+  Calculator, X, CheckCircle2, Activity, Settings, AlertTriangle
 } from 'lucide-react';
 
 import { invoke } from '@tauri-apps/api/core';
@@ -27,7 +27,6 @@ const ControlPanel = () => {
   const [deviceId, setDeviceId] = useState<string | null>(null);
   const [isLoadingSettings, setIsLoadingSettings] = useState(true);
 
-  // Lấy Device ID từ cấu hình hệ thống
   useEffect(() => {
     const fetchSettings = async () => {
       try {
@@ -70,14 +69,38 @@ const ControlPanel = () => {
 };
 
 const ControlPanelContent = ({ deviceId }: { deviceId: string }) => {
-  const { sensorData, deviceStatus, fsmState, isLoading, updatePumpStatusOptimistically } = useDeviceContext();
+  const { sensorData, deviceStatus, fsmState, isLoading, updatePumpStatusOptimistically, settings } = useDeviceContext();
   const { isProcessing, togglePump, setPumpPwm, syncDeviceStatus } = useDeviceControl(deviceId);
 
+  // 🟢 THÊM STATE ĐỂ LƯU CẤU HÌNH CỦA THIẾT BỊ (ĐỂ CHECK AN TOÀN)
+  const [deviceConfig, setDeviceConfig] = useState<any>(null);
+
+  const isOnline = deviceStatus?.is_online || false;
+
   useEffect(() => {
-    if (deviceStatus?.is_online) {
+    if (isOnline) {
       syncDeviceStatus();
     }
-  }, [deviceStatus?.is_online]);
+  }, [isOnline]);
+
+  // 🟢 FETCH CONFIG CỦA MẠCH ĐỂ KIỂM TRA NGƯỠNG AN TOÀN
+  useEffect(() => {
+    if (!deviceId || !settings?.backend_url) return;
+    const fetchDeviceConfig = async () => {
+      try {
+        const res = await fetch(`${settings.backend_url}/api/devices/${deviceId}/config`, {
+          headers: { 'X-API-Key': settings.api_key }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setDeviceConfig(data.data || data);
+        }
+      } catch (err) {
+        console.error("Lỗi fetch cấu hình thiết bị:", err);
+      }
+    };
+    fetchDeviceConfig();
+  }, [deviceId, settings]);
 
   const [pwmValues, setPwmValues] = useState<Record<string, number>>({
     OSAKA_PUMP: 100, MIST_VALVE: 100, A: 50, B: 50, PH_UP: 50, PH_DOWN: 50
@@ -89,15 +112,36 @@ const ControlPanelContent = ({ deviceId }: { deviceId: string }) => {
   const [manualPH, setManualPH] = useState({ current: 6.0, target: 6.0 });
   const [confirmStep, setConfirmStep] = useState(false);
 
-  const isOnline = deviceStatus?.is_online || false;
+  // TRẠNG THÁI CHO POPUP CONFIRM CƯỠNG CHẾ
+  const [forceConfirmModal, setForceConfirmModal] = useState<{
+    isOpen: boolean;
+    pumpId: string;
+    title: string;
+    val?: number;
+  }>({ isOpen: false, pumpId: '', title: '' });
 
-  // 🟢 Lấy object trạng thái bơm từ JSON
   const pumps: Partial<PumpStatus> = sensorData?.pump_status || {};
-
-  // 🟢 FIX LỖI BOOLEAN: So sánh === true thay vì chuỗi 'on'
   const isOsakaOn = pumps.osaka_pump === true;
 
-  // 🟢 Mở Modal Pha Chế Thông Minh
+  // 🟢 HÀM KIỂM TRA NGUY HIỂM ĐÃ ĐƯỢC FIX CHUẨN 100%
+  const checkIsDangerous = () => {
+    // 1. Kiểm tra qua chuỗi FSM từ Backend
+    if (fsmState.includes('Emergency') || fsmState.includes('Fault')) return true;
+
+    // 2. Tính toán độc lập trên UI dựa trên Sensor thực tế và Config thật
+    if (!sensorData || !deviceConfig) return false;
+
+    const water = Number(sensorData.water_level);
+    const ec = Number(sensorData.ec_value);
+    const ph = Number(sensorData.ph_value);
+
+    const isWaterCritical = deviceConfig.enable_water_level_sensor && (water <= Number(deviceConfig.water_level_critical_min));
+    const isEcBad = deviceConfig.enable_ec_sensor && (ec <= Number(deviceConfig.min_ec_limit) || ec >= Number(deviceConfig.max_ec_limit));
+    const isPhBad = deviceConfig.enable_ph_sensor && (ph <= Number(deviceConfig.min_ph_limit) || ph >= Number(deviceConfig.max_ph_limit));
+
+    return isWaterCritical || isEcBad || isPhBad || deviceConfig.emergency_shutdown === true;
+  };
+
   const handleOpenSmartDosing = () => {
     if (!isOnline) return toast.error("Thiết bị đang Offline!");
     if (!isOsakaOn) return toast("Vui lòng bật Bơm Trộn (Osaka) trước khi pha chế!", { icon: '⚠️' });
@@ -114,7 +158,6 @@ const ControlPanelContent = ({ deviceId }: { deviceId: string }) => {
     setShowSmartModal(true);
   };
 
-  // 🟢 Tính toán liều lượng
   const doseCalc = useMemo(() => {
     let ec_ml = 0, ph_up_ml = 0, ph_down_ml = 0;
     const ecDiff = manualEC.target - manualEC.current;
@@ -139,30 +182,27 @@ const ControlPanelContent = ({ deviceId }: { deviceId: string }) => {
   // --- HANDLERS ---
   const handleToggle = async (pumpId: string, action: 'on' | 'off' | boolean, _isLocked: boolean, currentPwm?: number, title?: string) => {
     const isTurningOn = action === 'on' || action === true;
-    let actionStr = isTurningOn ? 'on' : 'off';
     const name = title || pumpId;
 
-    // 🟢 LOGIC CƯỠNG CHẾ (FORCE ON)
-    if (isTurningOn && (fsmState.includes('EmergencyStop') || fsmState.includes('SystemFault'))) {
-      const confirmForce = window.confirm(
-        `⚠️ CẢNH BÁO AN TOÀN!\n\nHệ thống đang ngắt khẩn cấp do thông số môi trường vượt ngưỡng.\nBạn có chắc chắn muốn CƯỠNG CHẾ BẬT [${name}] không?`
-      );
-      if (!confirmForce) return; // Hủy nếu người dùng không đồng ý
-      actionStr = 'force_on'; // Chuyển thành lệnh cưỡng chế
+    if (isTurningOn && checkIsDangerous()) {
+      setForceConfirmModal({ isOpen: true, pumpId, title: name });
+      return;
     }
 
-    // Optimistic Update
+    executeToggle(pumpId, isTurningOn ? 'on' : 'off', currentPwm, name);
+  };
+
+  const executeToggle = async (pumpId: string, actionStr: 'on' | 'off' | 'force_on', currentPwm?: number, name?: string) => {
+    const isTurningOn = actionStr === 'on' || actionStr === 'force_on';
     updatePumpStatusOptimistically(pumpId, isTurningOn as any);
     const toastId = toast.loading(`Đang gửi lệnh ${actionStr === 'force_on' ? 'CƯỠNG CHẾ BẬT' : (isTurningOn ? 'BẬT' : 'TẮT')} ${name}...`);
 
-    // Gửi lệnh (Mặc định thời gian cưỡng chế là 120 giây (2 phút) để an toàn)
     const success = await togglePump(pumpId, actionStr, currentPwm, actionStr === 'force_on' ? 120 : undefined);
 
     if (success) {
       toast.success(`Đã ${actionStr === 'force_on' ? 'CƯỠNG CHẾ BẬT' : (isTurningOn ? 'BẬT' : 'TẮT')} ${name}!`, { id: toastId });
     } else {
       toast.error(`Lỗi điều khiển ${name}.`, { id: toastId });
-      // Hoàn tác UI
       updatePumpStatusOptimistically(pumpId, (!isTurningOn) as any);
     }
   };
@@ -174,40 +214,55 @@ const ControlPanelContent = ({ deviceId }: { deviceId: string }) => {
   const handlePwmCommit = async (pumpId: string, val: number, title: string) => {
     if (!isOnline) return;
 
-    // 🟢 LOGIC CƯỠNG CHẾ CHO THANH TRƯỢT PWM
-    if (val > 0 && (fsmState.includes('EmergencyStop') || fsmState.includes('SystemFault'))) {
-      const confirmForce = window.confirm(
-        `⚠️ CẢNH BÁO AN TOÀN!\n\nHệ thống đang ngắt khẩn cấp.\nBạn có muốn CƯỠNG CHẾ chạy [${title}] ở mức ${val}% không?`
-      );
+    if (val > 0 && checkIsDangerous()) {
+      setForceConfirmModal({ isOpen: true, pumpId, title, val });
+      return;
+    }
 
-      if (!confirmForce) {
-        // Nếu người dùng ấn Hủy, gạt thanh trượt về 0 lại
-        handlePwmChange(pumpId, 0);
-        return;
-      }
+    executePwmCommit(pumpId, val, title);
+  };
 
-      // Nếu Đồng ý, ta "mượn" hàm togglePump để gửi lệnh force_on kèm thông số PWM
+  const executePwmCommit = async (pumpId: string, val: number, title: string, isForce: boolean = false) => {
+    if (isForce) {
       const toastId = toast.loading(`Đang cưỡng chế chạy ${title} ở ${val}%...`);
-      updatePumpStatusOptimistically(pumpId, true);
-
-      // Gửi lệnh Cưỡng chế chạy trong 120s với tốc độ PWM mong muốn
+      updatePumpStatusOptimistically(pumpId, true as any);
       const success = await togglePump(pumpId, 'force_on', val, 120);
 
       if (success) {
         toast.success(`Đã CƯỠNG CHẾ chạy ${title} ở ${val}%!`, { id: toastId });
       } else {
         toast.error(`Lỗi điều khiển ${title}.`, { id: toastId });
-        updatePumpStatusOptimistically(pumpId, false);
+        updatePumpStatusOptimistically(pumpId, false as any);
         handlePwmChange(pumpId, 0);
       }
       return;
     }
 
-    // 🟢 Logic bình thường khi hệ thống an toàn
     const toastId = toast.loading(`Đang cập nhật công suất ${title}...`);
     if (setPumpPwm) {
       await setPumpPwm(pumpId, val);
       toast.success(`Đã lưu công suất ${title}: ${val}%`, { id: toastId });
+    }
+  };
+
+  // HÀM XÁC NHẬN TỪ MODAL POPUP
+  const confirmForceAction = () => {
+    const { pumpId, title, val } = forceConfirmModal;
+    setForceConfirmModal({ isOpen: false, pumpId: '', title: '' });
+
+    if (val !== undefined) {
+      executePwmCommit(pumpId, val, title, true);
+    } else {
+      executeToggle(pumpId, 'force_on', undefined, title);
+    }
+  };
+
+  // HÀM HỦY TỪ MODAL POPUP
+  const cancelForceAction = () => {
+    const { pumpId, val } = forceConfirmModal;
+    setForceConfirmModal({ isOpen: false, pumpId: '', title: '' });
+    if (val !== undefined) {
+      handlePwmChange(pumpId, 0);
     }
   };
 
@@ -228,7 +283,6 @@ const ControlPanelContent = ({ deviceId }: { deviceId: string }) => {
     setShowSmartModal(false);
     toast.success("🚀 Bắt đầu pha chế tự động!");
 
-    // Châm A và B tuần tự
     if (doseCalc.ec_sec > 0) {
       await togglePump("A", "on", CONSTANTS.DEFAULT_DOSING_PWM, doseCalc.ec_sec);
       toast(`🧪 Đang châm Vi lượng A (${doseCalc.ec_sec}s)...`, { icon: 'ℹ️', duration: 4000 });
@@ -237,7 +291,6 @@ const ControlPanelContent = ({ deviceId }: { deviceId: string }) => {
         await togglePump("B", "on", CONSTANTS.DEFAULT_DOSING_PWM, doseCalc.ec_sec);
         toast(`🧪 Đang châm Vi lượng B (${doseCalc.ec_sec}s)...`, { icon: 'ℹ️', duration: 4000 });
 
-        // Châm pH sau cùng
         setTimeout(async () => {
           if (doseCalc.ph_up_sec > 0) await togglePump("PH_UP", "on", CONSTANTS.DEFAULT_DOSING_PWM, doseCalc.ph_up_sec);
           if (doseCalc.ph_down_sec > 0) await togglePump("PH_DOWN", "on", CONSTANTS.DEFAULT_DOSING_PWM, doseCalc.ph_down_sec);
@@ -349,6 +402,42 @@ const ControlPanelContent = ({ deviceId }: { deviceId: string }) => {
           />
         </div>
       </section>
+
+      {/* 🟢 CUSTOM MODAL: CẢNH BÁO CƯỠNG CHẾ BẬT BƠM NẰM Ở ĐÂY */}
+      {forceConfirmModal.isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-slate-900 border border-red-900/50 rounded-3xl shadow-2xl max-w-sm w-full overflow-hidden">
+            <div className="p-6 text-center space-y-4">
+              <div className="mx-auto bg-red-500/10 w-16 h-16 rounded-full flex items-center justify-center mb-4">
+                <AlertTriangle className="text-red-500" size={32} />
+              </div>
+              <h2 className="text-xl font-bold text-white">Cảnh báo An toàn!</h2>
+              <p className="text-slate-400 text-sm">
+                Hệ thống phát hiện thông số môi trường đang ở mức nguy hiểm và đã ngắt bảo vệ.
+              </p>
+              <p className="text-slate-300 text-sm font-medium">
+                Bạn có chắc chắn muốn <span className="text-red-400">CƯỠNG CHẾ CHẠY</span> <br />
+                <strong className="text-white text-base">[{forceConfirmModal.title}]</strong>
+                {forceConfirmModal.val !== undefined ? ` ở mức ${forceConfirmModal.val}%` : ''} không?
+              </p>
+            </div>
+            <div className="grid grid-cols-2 divide-x divide-slate-800 border-t border-slate-800">
+              <button
+                onClick={cancelForceAction}
+                className="p-4 font-semibold text-slate-400 hover:text-white hover:bg-slate-800/50 transition-colors"
+              >
+                Hủy Bỏ
+              </button>
+              <button
+                onClick={confirmForceAction}
+                className="p-4 font-bold text-red-500 hover:bg-red-500/10 transition-colors"
+              >
+                Cưỡng Chế
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* SMART DOSING MODAL */}
       {showSmartModal && (
