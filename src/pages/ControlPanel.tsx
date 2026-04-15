@@ -1,7 +1,4 @@
-// 1. Sửa lại dòng import React (Xóa chữ React đi vì Vite không cần)
 import { useState, useEffect, useMemo } from 'react';
-
-// 2. Xóa các icon thừa: AlertTriangle, Power, Info
 import {
   FlaskConical, Droplets, Waves, RotateCcw, CloudRain,
   Calculator, X, CheckCircle2, Activity, Settings
@@ -13,7 +10,6 @@ import toast from 'react-hot-toast';
 import { ControlCard } from '../components/ui/ControlCard';
 import { FsmStatusBadge } from '../components/ui/FsmStatusBadge';
 
-// 3. 🟢 IMPORT THÊM TYPE PUMPSTATUS VÀO ĐÂY
 import { PumpStatus } from '../types/models';
 import { useDeviceContext } from '../context/DeviceContext';
 import { useDeviceControl } from '../hooks/useDeviceControl';
@@ -94,8 +90,12 @@ const ControlPanelContent = ({ deviceId }: { deviceId: string }) => {
   const [confirmStep, setConfirmStep] = useState(false);
 
   const isOnline = deviceStatus?.is_online || false;
+
+  // 🟢 Lấy object trạng thái bơm từ JSON
   const pumps: Partial<PumpStatus> = sensorData?.pump_status || {};
-  const isOsakaOn = pumps.OSAKA_PUMP === 'on';
+
+  // 🟢 FIX LỖI BOOLEAN: So sánh === true thay vì chuỗi 'on'
+  const isOsakaOn = pumps.osaka_pump === true;
 
   // 🟢 Mở Modal Pha Chế Thông Minh
   const handleOpenSmartDosing = () => {
@@ -137,20 +137,33 @@ const ControlPanelContent = ({ deviceId }: { deviceId: string }) => {
   }, [tankVolume, manualEC, manualPH]);
 
   // --- HANDLERS ---
-  const handleToggle = async (pumpId: string, action: 'on' | 'off', _isLocked: boolean, currentPwm?: number, title?: string) => {
+  const handleToggle = async (pumpId: string, action: 'on' | 'off' | boolean, _isLocked: boolean, currentPwm?: number, title?: string) => {
+    const isTurningOn = action === 'on' || action === true;
+    let actionStr = isTurningOn ? 'on' : 'off';
     const name = title || pumpId;
 
-    // Optimistic Update
-    updatePumpStatusOptimistically(pumpId, action);
-    const toastId = toast.loading(`Đang gửi lệnh ${action === 'on' ? 'BẬT' : 'TẮT'} ${name}...`);
+    // 🟢 LOGIC CƯỠNG CHẾ (FORCE ON)
+    if (isTurningOn && (fsmState.includes('EmergencyStop') || fsmState.includes('SystemFault'))) {
+      const confirmForce = window.confirm(
+        `⚠️ CẢNH BÁO AN TOÀN!\n\nHệ thống đang ngắt khẩn cấp do thông số môi trường vượt ngưỡng.\nBạn có chắc chắn muốn CƯỠNG CHẾ BẬT [${name}] không?`
+      );
+      if (!confirmForce) return; // Hủy nếu người dùng không đồng ý
+      actionStr = 'force_on'; // Chuyển thành lệnh cưỡng chế
+    }
 
-    const success = await togglePump(pumpId, action, currentPwm);
+    // Optimistic Update
+    updatePumpStatusOptimistically(pumpId, isTurningOn as any);
+    const toastId = toast.loading(`Đang gửi lệnh ${actionStr === 'force_on' ? 'CƯỠNG CHẾ BẬT' : (isTurningOn ? 'BẬT' : 'TẮT')} ${name}...`);
+
+    // Gửi lệnh (Mặc định thời gian cưỡng chế là 120 giây (2 phút) để an toàn)
+    const success = await togglePump(pumpId, actionStr, currentPwm, actionStr === 'force_on' ? 120 : undefined);
 
     if (success) {
-      toast.success(`Đã ${action === 'on' ? 'BẬT' : 'TẮT'} ${name} thành công!`, { id: toastId });
+      toast.success(`Đã ${actionStr === 'force_on' ? 'CƯỠNG CHẾ BẬT' : (isTurningOn ? 'BẬT' : 'TẮT')} ${name}!`, { id: toastId });
     } else {
       toast.error(`Lỗi điều khiển ${name}.`, { id: toastId });
-      updatePumpStatusOptimistically(pumpId, action === 'on' ? 'off' : 'on');
+      // Hoàn tác UI
+      updatePumpStatusOptimistically(pumpId, (!isTurningOn) as any);
     }
   };
 
@@ -160,6 +173,37 @@ const ControlPanelContent = ({ deviceId }: { deviceId: string }) => {
 
   const handlePwmCommit = async (pumpId: string, val: number, title: string) => {
     if (!isOnline) return;
+
+    // 🟢 LOGIC CƯỠNG CHẾ CHO THANH TRƯỢT PWM
+    if (val > 0 && (fsmState.includes('EmergencyStop') || fsmState.includes('SystemFault'))) {
+      const confirmForce = window.confirm(
+        `⚠️ CẢNH BÁO AN TOÀN!\n\nHệ thống đang ngắt khẩn cấp.\nBạn có muốn CƯỠNG CHẾ chạy [${title}] ở mức ${val}% không?`
+      );
+
+      if (!confirmForce) {
+        // Nếu người dùng ấn Hủy, gạt thanh trượt về 0 lại
+        handlePwmChange(pumpId, 0);
+        return;
+      }
+
+      // Nếu Đồng ý, ta "mượn" hàm togglePump để gửi lệnh force_on kèm thông số PWM
+      const toastId = toast.loading(`Đang cưỡng chế chạy ${title} ở ${val}%...`);
+      updatePumpStatusOptimistically(pumpId, true);
+
+      // Gửi lệnh Cưỡng chế chạy trong 120s với tốc độ PWM mong muốn
+      const success = await togglePump(pumpId, 'force_on', val, 120);
+
+      if (success) {
+        toast.success(`Đã CƯỠNG CHẾ chạy ${title} ở ${val}%!`, { id: toastId });
+      } else {
+        toast.error(`Lỗi điều khiển ${title}.`, { id: toastId });
+        updatePumpStatusOptimistically(pumpId, false);
+        handlePwmChange(pumpId, 0);
+      }
+      return;
+    }
+
+    // 🟢 Logic bình thường khi hệ thống an toàn
     const toastId = toast.loading(`Đang cập nhật công suất ${title}...`);
     if (setPumpPwm) {
       await setPumpPwm(pumpId, val);
@@ -249,20 +293,24 @@ const ControlPanelContent = ({ deviceId }: { deviceId: string }) => {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <ControlCard
             pumpId="OSAKA_PUMP" title="Bơm Tuần Hoàn (Trộn)" icon={Waves} colorClass="text-cyan-400" borderClass="cyan-500"
-            isOn={pumps.OSAKA_PUMP === 'on'} supportsPwm currentPwm={pwmValues.OSAKA_PUMP}
-            isOnline={isOnline} isProcessing={isProcessing} onToggle={handleToggle} onPwmChange={handlePwmChange} onPwmCommit={handlePwmCommit}
+            isOn={pumps.osaka_pump === true}
+            supportsPwm currentPwm={pwmValues.OSAKA_PUMP}
+            isOnline={isOnline} isProcessing={isProcessing} onToggle={handleToggle as any} onPwmChange={handlePwmChange} onPwmCommit={handlePwmCommit}
           />
           <ControlCard
             pumpId="MIST_VALVE" title="Van Phun Sương" icon={CloudRain} colorClass="text-blue-400" borderClass="blue-500"
-            isOn={pumps.MIST_VALVE === 'on'} isOnline={isOnline} isProcessing={isProcessing} onToggle={handleToggle}
+            isOn={pumps.mist_valve === true}
+            isOnline={isOnline} isProcessing={isProcessing} onToggle={handleToggle as any}
           />
           <ControlCard
             pumpId="WATER_PUMP" title="Bơm Cấp Nước Sạch" icon={Droplets} colorClass="text-emerald-400" borderClass="emerald-500"
-            isOn={pumps.WATER_PUMP === 'on'} isOnline={isOnline} isProcessing={isProcessing} onToggle={handleToggle}
+            isOn={pumps.water_pump_in === true}
+            isOnline={isOnline} isProcessing={isProcessing} onToggle={handleToggle as any}
           />
           <ControlCard
             pumpId="DRAIN_PUMP" title="Bơm Xả Thải" icon={Waves} colorClass="text-red-400" borderClass="red-500"
-            isOn={pumps.DRAIN_PUMP === 'on'} isOnline={isOnline} isProcessing={isProcessing} onToggle={handleToggle}
+            isOn={pumps.water_pump_out === true}
+            isOnline={isOnline} isProcessing={isProcessing} onToggle={handleToggle as any}
           />
         </div>
       </section>
@@ -273,27 +321,31 @@ const ControlPanelContent = ({ deviceId }: { deviceId: string }) => {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <ControlCard
             pumpId="A" title="Dinh Dưỡng A" icon={FlaskConical} colorClass="text-fuchsia-400" borderClass="fuchsia-500"
-            isOn={pumps.A === 'on'} supportsPwm currentPwm={pwmValues.A}
+            isOn={pumps.pump_a === true}
+            supportsPwm currentPwm={pwmValues.A}
             lockedMessage={!isOsakaOn ? "Cần bật Bơm Trộn" : undefined}
-            isOnline={isOnline} isProcessing={isProcessing} onToggle={handleToggle} onPwmChange={handlePwmChange} onPwmCommit={handlePwmCommit}
+            isOnline={isOnline} isProcessing={isProcessing} onToggle={handleToggle as any} onPwmChange={handlePwmChange} onPwmCommit={handlePwmCommit}
           />
           <ControlCard
             pumpId="B" title="Dinh Dưỡng B" icon={FlaskConical} colorClass="text-purple-400" borderClass="purple-500"
-            isOn={pumps.B === 'on'} supportsPwm currentPwm={pwmValues.B}
+            isOn={pumps.pump_b === true}
+            supportsPwm currentPwm={pwmValues.B}
             lockedMessage={!isOsakaOn ? "Cần bật Bơm Trộn" : undefined}
-            isOnline={isOnline} isProcessing={isProcessing} onToggle={handleToggle} onPwmChange={handlePwmChange} onPwmCommit={handlePwmCommit}
+            isOnline={isOnline} isProcessing={isProcessing} onToggle={handleToggle as any} onPwmChange={handlePwmChange} onPwmCommit={handlePwmCommit}
           />
           <ControlCard
             pumpId="PH_UP" title="Tăng pH (+)" icon={Droplets} colorClass="text-orange-400" borderClass="orange-500"
-            isOn={pumps.PH_UP === 'on'} supportsPwm currentPwm={pwmValues.PH_UP}
+            isOn={pumps.ph_up === true}
+            supportsPwm currentPwm={pwmValues.PH_UP}
             lockedMessage={!isOsakaOn ? "Cần bật Bơm Trộn" : undefined}
-            isOnline={isOnline} isProcessing={isProcessing} onToggle={handleToggle} onPwmChange={handlePwmChange} onPwmCommit={handlePwmCommit}
+            isOnline={isOnline} isProcessing={isProcessing} onToggle={handleToggle as any} onPwmChange={handlePwmChange} onPwmCommit={handlePwmCommit}
           />
           <ControlCard
             pumpId="PH_DOWN" title="Giảm pH (-)" icon={Droplets} colorClass="text-pink-500" borderClass="pink-500"
-            isOn={pumps.PH_DOWN === 'on'} supportsPwm currentPwm={pwmValues.PH_DOWN}
+            isOn={pumps.ph_down === true}
+            supportsPwm currentPwm={pwmValues.PH_DOWN}
             lockedMessage={!isOsakaOn ? "Cần bật Bơm Trộn" : undefined}
-            isOnline={isOnline} isProcessing={isProcessing} onToggle={handleToggle} onPwmChange={handlePwmChange} onPwmCommit={handlePwmCommit}
+            isOnline={isOnline} isProcessing={isProcessing} onToggle={handleToggle as any} onPwmChange={handlePwmChange} onPwmCommit={handlePwmCommit}
           />
         </div>
       </section>

@@ -9,14 +9,14 @@ export type DeviceState = 'on' | 'off';
  * Trạng thái chi tiết của tất cả các máy bơm và van trong hệ thống
  */
 export interface PumpStatus {
-  A: DeviceState;          // Bơm dinh dưỡng A
-  B: DeviceState;          // Bơm dinh dưỡng B
-  PH_UP: DeviceState;      // Bơm tăng pH
-  PH_DOWN: DeviceState;    // Bơm giảm pH
-  OSAKA_PUMP: DeviceState; // Bơm trộn/phun sương chính (Osaka)
-  MIST_VALVE: DeviceState; // Van điện từ phun sương
-  WATER_PUMP: DeviceState; // Bơm cấp nước vào (In)
-  DRAIN_PUMP: DeviceState; // Bơm thoát nước ra (Out)
+  pump_a: boolean;          // Bơm dinh dưỡng A
+  pump_b: boolean;          // Bơm dinh dưỡng B
+  ph_up: boolean;      // Bơm tăng pH
+  ph_down: boolean;    // Bơm giảm pH
+  osaka_pump: boolean; // Bơm trộn/phun sương chính (Osaka)
+  mist_valve: boolean; // Van điện từ phun sương
+  water_pump_in: boolean; // Bơm cấp nước vào (In)
+  water_pump_out: boolean; // Bơm thoát nước ra (Out)
 }
 
 /**

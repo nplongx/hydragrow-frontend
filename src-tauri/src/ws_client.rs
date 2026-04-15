@@ -75,19 +75,19 @@ pub async fn start_ws_listener(app: AppHandle, device_id: String) {
                                             let _ = app.emit("sensor_update", data);
                                         }
                                         WsMessage::Alert(alert) => {
-                                            // let _ = app.emit("alert", alert.clone());
-                                            //
-                                            // // 2. Nếu lỗi nghiêm trọng, bắn luôn Notification của hệ điều hành
-                                            // if alert.severity == "critical" {
-                                            //     crate::notification::show_critical_alert(
-                                            //         &app,
-                                            //         "Cảnh báo hệ thống Thủy Canh!",
-                                            //         &format!(
-                                            //             "Lỗi: {}. Vui lòng kiểm tra ngay!",
-                                            //             alert.message
-                                            //         ),
-                                            //     );
-                                            // }
+                                            let _ = app.emit("alert", alert.clone());
+
+                                            // 2. Nếu lỗi nghiêm trọng, bắn luôn Notification của hệ điều hành
+                                            if alert.level == "critical" {
+                                                crate::notification::show_critical_alert(
+                                                    &app,
+                                                    "Cảnh báo hệ thống Thủy Canh!",
+                                                    &format!(
+                                                        "Lỗi: {}. Vui lòng kiểm tra ngay!",
+                                                        alert.message
+                                                    ),
+                                                );
+                                            }
                                         }
                                         WsMessage::DeviceStatus(status) => {
                                             let _ = app.emit("device_status", status);

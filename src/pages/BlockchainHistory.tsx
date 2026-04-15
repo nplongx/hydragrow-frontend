@@ -3,9 +3,12 @@ import { invoke } from '@tauri-apps/api/core';
 import { fetch } from '@tauri-apps/plugin-http';
 import {
   ShieldCheck, Clock, ExternalLink, Box, Server,
-  AlertTriangle, Settings, Calendar, ChevronDown, Download // 🟢 Import thêm icon Download
+  AlertTriangle, Settings, Calendar, ChevronDown, Download
 } from 'lucide-react';
 import toast from 'react-hot-toast';
+
+import { writeTextFile } from '@tauri-apps/plugin-fs';
+import { save } from '@tauri-apps/plugin-dialog';
 
 interface BlockchainRecord {
   id: number;
@@ -56,10 +59,10 @@ const BlockchainHistory = () => {
     init();
   }, []);
 
-  // 2. Fetch danh sách vụ mùa (Có fallback mock data nếu Backend chưa code xong API)
+  // 2. Fetch danh sách vụ mùa
   const fetchSeasons = async (devId: string, backendUrl: string, apiKey: string) => {
     try {
-      const url = `${backendUrl}/api/seasons?device_id=${devId}`;
+      const url = `${backendUrl}/api/devices/${devId}/seasons`;
       const response = await fetch(url, {
         method: 'GET',
         headers: { 'Content-Type': 'application/json', 'X-API-Key': apiKey }
@@ -73,33 +76,26 @@ const BlockchainHistory = () => {
       if (actualData.length > 0) setSelectedSeason(actualData[0].id);
 
     } catch (err) {
-      // MOCK DATA FALLBACK: Hiển thị tạm khi Backend chưa có bảng crop_seasons
-      console.warn("Dùng dữ liệu giả lập cho Vụ mùa (Do API chưa sẵn sàng).");
-      const mockSeasons: CropSeason[] = [
-        { id: 'SS-2026-04', name: 'Vụ Hè 2026 - Dưa Lưới', status: 'active', start_time: '2026-04-01T00:00:00Z' },
-        { id: 'SS-2026-01', name: 'Vụ Xuân 2026 - Dâu Tây', status: 'completed', start_time: '2026-01-10T00:00:00Z', end_time: '2026-03-25T00:00:00Z' }
-      ];
-      setSeasons(mockSeasons);
-      setSelectedSeason(mockSeasons[0].id);
+      console.warn("Lỗi khi tải dữ liệu vụ mùa:", err);
     }
   };
 
   // 3. Lắng nghe sự thay đổi của Vụ Mùa để tải lại Lịch sử Blockchain
   useEffect(() => {
     if (appConfig && selectedSeason) {
-      fetchHistory(appConfig.device_id, appConfig.backend_url, appConfig.api_key, selectedSeason);
+      fetchHistory(appConfig.backend_url, appConfig.api_key, selectedSeason);
     }
   }, [selectedSeason, appConfig]);
 
   // 4. Gọi API lấy lịch sử Blockchain CÓ LỌC THEO VỤ MÙA
-  const fetchHistory = async (devId: string, backendUrl: string, apiKey: string, seasonId: string) => {
+  const fetchHistory = async (backendUrl: string, apiKey: string, seasonId: string) => {
     setIsLoading(true);
     setError(null);
     try {
       if (!backendUrl) throw new Error("Chưa cấu hình URL máy chủ.");
 
       // Gắn season_id vào URL
-      const url = `${backendUrl}/api/blockchain/devices/${devId}?season_id=${seasonId}`;
+      const url = `${backendUrl}/api/devices/${deviceId}/blockchain?season_id=${seasonId}`;
       const response = await fetch(url, {
         method: 'GET',
         headers: {
@@ -155,39 +151,41 @@ const BlockchainHistory = () => {
   };
 
   // 🟢 6. HÀM XUẤT FILE CSV
-  const handleExportCSV = () => {
+  const handleExportCSV = async () => {
     if (history.length === 0) {
       toast.error("Không có dữ liệu để xuất!");
       return;
     }
 
-    // Tiêu đề các cột
-    const headers = ["ID", "Mã Thiết Bị", "Mã Vụ Mùa", "Hành Động", "Mã Giao Dịch (TxID)", "Thời Gian"];
+    try {
+      const headers = ["ID", "Mã Thiết Bị", "Mã Vụ Mùa", "Hành Động", "TxID", "Thời Gian"];
 
-    // Convert dữ liệu thành dạng chuỗi CSV, bọc trong dấu ngoặc kép để tránh lỗi dấu phẩy
-    const csvRows = history.map(row => [
-      row.id,
-      row.device_id,
-      row.season_id || "",
-      row.action.replace(/_/g, ' '),
-      row.tx_id,
-      new Date(row.created_at).toLocaleString('vi-VN')
-    ].map(val => `"${val}"`).join(","));
+      const csvRows = history.map(row => [
+        row.id,
+        row.device_id,
+        row.season_id || "",
+        row.action.replace(/_/g, ' '),
+        row.tx_id,
+        new Date(row.created_at).toLocaleString('vi-VN')
+      ].map(val => `"${val}"`).join(","));
 
-    // \uFEFF là BOM (Byte Order Mark) để báo cho Excel biết đây là file UTF-8 (đọc được Tiếng Việt)
-    const csvContent = "\uFEFF" + [headers.join(","), ...csvRows].join("\n");
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
+      const csvContent = "\uFEFF" + [headers.join(","), ...csvRows].join("\n");
 
-    // Tạo thẻ <a> ẩn để kích hoạt tải xuống
-    const link = document.createElement("a");
-    link.setAttribute("href", url);
-    link.setAttribute("download", `nhat-ky-niem-phong-${selectedSeason || 'tat-ca'}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+      // 📂 Cho user chọn nơi lưu
+      const filePath = await save({
+        defaultPath: `nhat-ky-niem-phong-${selectedSeason || 'tat-ca'}.csv`
+      });
 
-    toast.success("Đã xuất file CSV thành công!");
+      if (!filePath) return; // user cancel
+
+      // 💾 Ghi file thật xuống máy
+      await writeTextFile(filePath, csvContent);
+
+      toast.success("Đã lưu file thành công!");
+    } catch (err: any) {
+      console.error("ERROR SAVE FILE:", err);
+      toast.error(err?.message || "Lỗi khi lưu file!");
+    }
   };
 
   const truncateTx = (tx: string) => {

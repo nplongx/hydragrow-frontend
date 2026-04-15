@@ -1,5 +1,5 @@
-import React from 'react';
 import { Lock } from 'lucide-react';
+import React from 'react';
 import { Switch } from './Switch';
 import { toast } from 'react-hot-toast'; // Hoặc react-hot-toast tùy thư viện bạn đang dùng
 

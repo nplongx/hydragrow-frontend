@@ -12,8 +12,9 @@ pub fn run() {
         // 1. Khởi tạo các Plugin cần thiết (Lưu trữ file và Thông báo OS)
         .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_notification::init())
-        .plugin(tauri_plugin_http::init()) // <--- Thêm dòng này
-        // 3. Đăng ký TOÀN BỘ các hàm đã expose ở file commands.rs và notification.rs
+        .plugin(tauri_plugin_http::init()) // <--- Thêm dòng này 3. Đăng ký TOÀN BỘ các hàm đã expose ở file commands.rs và notification.rs
+        .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             commands::save_settings,
             commands::load_settings,

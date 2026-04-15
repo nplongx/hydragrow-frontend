@@ -33,14 +33,14 @@ const Dashboard = () => {
   }
 
   const pumps = sensorData.pump_status || {};
-  const isWaterPumpOn = pumps.WATER_PUMP === 'on';
-  const isDrainPumpOn = pumps.DRAIN_PUMP === 'on';
+  const isWaterPumpOn = pumps.water_pump_in;
+  const isDrainPumpOn = pumps.water_pump_out;
 
-  const handleToggle = async (pumpId: string, currentStatus: string | undefined) => {
-    const targetAction = currentStatus === 'on' ? 'off' : 'on';
+  const handleToggle = async (pumpId: string, currentStatus: boolean | undefined) => {
+    const targetAction = currentStatus ? 'off' : 'on';
     updatePumpStatusOptimistically(pumpId, targetAction);
     const success = await togglePump(pumpId, targetAction);
-    if (!success) updatePumpStatusOptimistically(pumpId, currentStatus === 'on' ? 'on' : 'off');
+    if (!success) updatePumpStatusOptimistically(pumpId, currentStatus ? 'on' : 'off');
   };
 
   return (
@@ -75,10 +75,10 @@ const Dashboard = () => {
       <div className="bg-slate-900 border border-slate-800 rounded-3xl p-5">
         <h3 className="text-sm font-medium text-slate-400 mb-4">Lệnh nhanh</h3>
         <div className="flex space-x-3">
-          <button disabled={isProcessing || !deviceStatus?.is_online} onClick={() => handleToggle("WATER_PUMP", pumps.WATER_PUMP)} className={`flex-1 py-3 rounded-2xl font-bold flex items-center justify-center space-x-2 ${isWaterPumpOn ? 'bg-rose-500 text-white' : 'bg-emerald-500 text-white'}`}>
+          <button disabled={isProcessing || !deviceStatus?.is_online} onClick={() => handleToggle("WATER_PUMP", pumps.water_pump_in)} className={`flex-1 py-3 rounded-2xl font-bold flex items-center justify-center space-x-2 ${isWaterPumpOn ? 'bg-rose-500 text-white' : 'bg-emerald-500 text-white'}`}>
             <Waves size={18} /> <span>{isWaterPumpOn ? 'Ngừng Cấp' : 'Cấp Nước'}</span>
           </button>
-          <button disabled={isProcessing || !deviceStatus?.is_online} onClick={() => handleToggle("DRAIN_PUMP", pumps.DRAIN_PUMP)} className={`flex-1 py-3 rounded-2xl font-bold flex items-center justify-center space-x-2 border ${isDrainPumpOn ? 'bg-rose-500 border-rose-500 text-white' : 'bg-slate-800 border-slate-700 text-white'}`}>
+          <button disabled={isProcessing || !deviceStatus?.is_online} onClick={() => handleToggle("DRAIN_PUMP", pumps.water_pump_out)} className={`flex-1 py-3 rounded-2xl font-bold flex items-center justify-center space-x-2 border ${isDrainPumpOn ? 'bg-rose-500 border-rose-500 text-white' : 'bg-slate-800 border-slate-700 text-white'}`}>
             <Waves size={18} className="rotate-180" /> <span>{isDrainPumpOn ? 'Ngừng Xả' : 'Xả Nước'}</span>
           </button>
         </div>

@@ -19,6 +19,9 @@
         }
       ]
     },
-    "notification:default"
+    "notification:default",
+    "fs:allow-write-text-file",
+    "fs:allow-download-write",
+    "dialog:default"
   ]
 }
