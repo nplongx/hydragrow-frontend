@@ -10,6 +10,7 @@ import { DeviceProvider } from './context/DeviceContext';
 import { Toaster } from 'react-hot-toast';
 import './App.css';
 import { CropSeasons } from './pages/CropSeasons';
+import SystemLog from './pages/SystemLog';
 
 function App() {
   return (
@@ -37,6 +38,7 @@ function App() {
             <Route path="blockchain" element={<BlockchainHistory />} />
             <Route path="/crop-seasons" element={<CropSeasons />} />
             <Route path="settings" element={<Settings />} />
+            <Route path="/logs" element={<SystemLog />} />
           </Route>
         </Routes>
       </Router>

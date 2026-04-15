@@ -6,8 +6,12 @@ import {
   LineChart,
   Settings,
   ShieldCheck,
-  Sprout // Thêm icon Sprout cho Mùa vụ
+  Sprout, // Thêm icon Sprout cho Mùa vụ
+  icons,
+  AlignLeftIcon,
+  AlignLeft
 } from 'lucide-react';
+import { path } from '@tauri-apps/api';
 
 const MainLayout = () => {
   // Danh sách các tab điều hướng (Đã thêm tab Mùa vụ)
@@ -18,7 +22,7 @@ const MainLayout = () => {
     { path: '/analytics', icon: LineChart, label: 'Phân tích' },
     { path: '/blockchain', icon: ShieldCheck, label: 'Niêm phong' },
     { path: '/settings', icon: Settings, label: 'Cài đặt' },
-  ];
+    { path: '/logs', icon: AlignLeft, label: 'Dinh dưỡng và pH' }];
 
   return (
     // Nền tối (Dark Mode First), chữ xám sáng

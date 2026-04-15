@@ -12,6 +12,7 @@ interface DeviceContextType {
   fsmState: string;
   isLoading: boolean;
   updatePumpStatusOptimistically: (stateKey: string, isNowOn: boolean) => void;
+  systemEvents: any
 }
 
 const DeviceContext = createContext<DeviceContextType | undefined>(undefined);
@@ -22,7 +23,8 @@ export const DeviceProvider = ({ children }: { children: ReactNode }) => {
   const [sensorData, setSensorData] = useState<SensorData | null>(null);
 
   const [deviceStatus, setDeviceStatus] = useState<StatusPayload>({ is_online: false, last_seen: '' });
-  const [fsmState, setFsmState] = useState<string>("Monitoring");
+  const [fsmState, setFsmState] = useState<string>("Offline");
+  const [systemEvents, setSystemEvents] = useState<any[]>([]); // 🟢 THÊM STATE NÀY
   const [isLoading, setIsLoading] = useState(true);
 
   // ==========================================
@@ -36,8 +38,13 @@ export const DeviceProvider = ({ children }: { children: ReactNode }) => {
     }
     sensorTimeoutRef.current = setTimeout(() => {
       setDeviceStatus({ is_online: false, last_seen: '' });
+
+      // ++ THÊM 2 DÒNG NÀY ĐỂ XÓA DỮ LIỆU CŨ ++
+      setFsmState("Offline");
+      setSensorData(prev => prev ? { ...prev, pump_status: {} as any } : prev);
+
       toast.error("Mất tín hiệu từ thiết bị! (Timeout)");
-    }, 15000); // Đợi 15s nếu mạch không gửi data
+    }, 15000);
   }, []);
 
   useEffect(() => {
@@ -114,12 +121,21 @@ export const DeviceProvider = ({ children }: { children: ReactNode }) => {
               } else {
                 toast.error("Đã ngắt kết nối mạch ESP32 (LWT)!");
                 if (sensorTimeoutRef.current) clearTimeout(sensorTimeoutRef.current);
+
+                setFsmState("Offline");
+                setSensorData(prev => prev ? { ...prev, pump_status: {} as any } : prev);
               }
               return;
             }
 
             if (data.type === 'alert') {
               const alert = data.payload;
+
+              // 🟢 THÊM DÒNG NÀY: Đẩy sự kiện mới nhất lên đầu mảng (chỉ giữ 50 cái)
+              if (alert.level !== 'FSM_UPDATE') {
+                setSystemEvents(prev => [alert, ...prev].slice(0, 50));
+              }
+
               if (alert.level === 'FSM_UPDATE') {
                 setFsmState(alert.message);
                 return;
@@ -191,7 +207,7 @@ export const DeviceProvider = ({ children }: { children: ReactNode }) => {
 
   return (
     <DeviceContext.Provider value={{
-      deviceId, sensorData, deviceStatus, fsmState, isLoading, updatePumpStatusOptimistically, settings
+      deviceId, sensorData, deviceStatus, fsmState, isLoading, updatePumpStatusOptimistically, settings, systemEvents
     }}>
       {children}
     </DeviceContext.Provider>
