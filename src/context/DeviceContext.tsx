@@ -90,6 +90,27 @@ export const DeviceProvider = ({ children }: { children: ReactNode }) => {
       }
       setIsLoading(false);
 
+      const loadEventHistory = async () => {
+        try {
+          const res = await fetch(`${settings.backend_url}/api/devices/${deviceId}/events`, {
+            method: 'GET',
+            headers: { 'X-API-Key': settings.api_key || '' }
+          });
+          if (res.ok) {
+            const json = await res.json();
+            if (json.data && Array.isArray(json.data)) {
+              // Nạp dữ liệu cũ vào RAM
+              setSystemEvents(json.data);
+            }
+          }
+        } catch (error) {
+          console.error("Lỗi nạp lịch sử sự kiện:", error);
+        }
+      };
+
+      // Gọi hàm hút dữ liệu ngay lập tức
+      loadEventHistory();
+
       const connectWs = () => {
         const cleanBaseUrl = settings.backend_url.replace(/\/$/, "");
         const wsUrl = `${cleanBaseUrl.replace(/^http/, 'ws')}/api/devices/${deviceId}/ws?api_key=${settings.api_key}`;

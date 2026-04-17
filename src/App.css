@@ -9,3 +9,8 @@
 }
 .toggle-checkbox:checked { @apply bg-emerald-500; }
 .toggle-checkbox:checked::before { @apply transform translate-x-5; }
+
+@keyframes shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}

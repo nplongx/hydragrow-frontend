@@ -63,13 +63,13 @@ export const useCropSeason = () => {
     loadSeasons();
   }, [loadSeasons]);
 
-  const createSeason = async (name: string, plantType: string) => {
+  const createSeason = async (name: string, plantType: string, description: string = '') => {
     if (!deviceId || !settings?.backend_url) return false;
     try {
       const res = await fetch(`${settings.backend_url}/api/devices/${deviceId}/seasons`, {
         method: 'POST',
         headers: getHeaders(),
-        body: JSON.stringify({ name, plant_type: plantType })
+        body: JSON.stringify({ name, plant_type: plantType, description })
       });
       if (res.ok) {
         toast.success("Đã bắt đầu mùa vụ mới!");
@@ -81,6 +81,29 @@ export const useCropSeason = () => {
       }
     } catch (error) {
       toast.error("Lỗi mạng khi tạo mùa vụ");
+    }
+    return false;
+  };
+
+  // Hàm Update mùa vụ ĐANG CHẠY
+  const updateSeason = async (name: string, plantType: string, description: string) => {
+    if (!deviceId || !settings?.backend_url) return false;
+    try {
+      const res = await fetch(`${settings.backend_url}/api/devices/${deviceId}/seasons/active`, {
+        method: 'PUT',
+        headers: getHeaders(),
+        body: JSON.stringify({ name, plant_type: plantType, description })
+      });
+      if (res.ok) {
+        toast.success("Đã cập nhật thông tin mùa vụ!");
+        await loadSeasons(); // Tải lại dữ liệu mới
+        return true;
+      } else {
+        const err = await safeJsonParse(res);
+        toast.error(`Lỗi: ${err?.message || 'Không thể cập nhật mùa vụ'}`);
+      }
+    } catch (error) {
+      toast.error("Lỗi mạng khi cập nhật mùa vụ");
     }
     return false;
   };
@@ -106,5 +129,5 @@ export const useCropSeason = () => {
     return false;
   };
 
-  return { activeSeason, history, isLoading, createSeason, endSeason, refresh: loadSeasons };
+  return { activeSeason, history, isLoading, createSeason, endSeason, refresh: loadSeasons, updateSeason };
 };

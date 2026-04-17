@@ -170,6 +170,7 @@ export interface CropSeason {
   device_id: string;
   name: string;
   plant_type: string | null;
+  description: string | null;
   start_time: string;
   end_time: string | null;
   status: 'active' | 'completed';

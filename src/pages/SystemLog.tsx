@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
   AlertTriangle, CheckCircle, Info, Droplets,
-  Activity, Filter, Clock, Calendar
+  Filter, Clock, Calendar, Zap
 } from 'lucide-react';
 import { useDeviceContext } from '../context/DeviceContext';
 
@@ -9,16 +9,35 @@ const SystemLog = () => {
   const { systemEvents, deviceId } = useDeviceContext();
   const [filter, setFilter] = useState<string>('all');
 
-  // Hàm xác định icon và màu sắc cho từng loại sự kiện
+  // 🟢 NÂNG CẤP BẢNG MÀU: Thêm Glow (shadow) và Gradient Background
   const getEventStyle = (level: string, title: string) => {
-    if (level === 'critical') return { icon: AlertTriangle, color: 'text-rose-500', bg: 'bg-rose-500/10 border-rose-500/30' };
-    if (level === 'warning') return { icon: AlertTriangle, color: 'text-amber-500', bg: 'bg-amber-500/10 border-amber-500/30' };
-    if (level === 'success') return { icon: CheckCircle, color: 'text-emerald-500', bg: 'bg-emerald-500/10 border-emerald-500/30' };
-    if (title.includes('Châm Phân') || title.includes('Điều Chỉnh pH')) return { icon: Droplets, color: 'text-blue-400', bg: 'bg-blue-500/10 border-blue-500/30' };
-    return { icon: Info, color: 'text-slate-400', bg: 'bg-slate-700/30 border-slate-600' };
+    if (level === 'critical') return {
+      icon: AlertTriangle, color: 'text-rose-400',
+      nodeBg: 'bg-rose-500/20 border-rose-400', shadow: 'shadow-[0_0_15px_rgba(244,63,94,0.6)]',
+      cardBg: 'bg-gradient-to-r from-rose-500/10 to-transparent border-rose-500/20'
+    };
+    if (level === 'warning') return {
+      icon: AlertTriangle, color: 'text-amber-400',
+      nodeBg: 'bg-amber-500/20 border-amber-400', shadow: 'shadow-[0_0_15px_rgba(245,158,11,0.6)]',
+      cardBg: 'bg-gradient-to-r from-amber-500/10 to-transparent border-amber-500/20'
+    };
+    if (level === 'success') return {
+      icon: CheckCircle, color: 'text-emerald-400',
+      nodeBg: 'bg-emerald-500/20 border-emerald-400', shadow: 'shadow-[0_0_15px_rgba(16,185,129,0.6)]',
+      cardBg: 'bg-gradient-to-r from-emerald-500/10 to-transparent border-emerald-500/20'
+    };
+    if (title.includes('Châm Phân') || title.includes('Điều Chỉnh pH')) return {
+      icon: Droplets, color: 'text-cyan-400',
+      nodeBg: 'bg-cyan-500/20 border-cyan-400', shadow: 'shadow-[0_0_15px_rgba(6,182,212,0.6)]',
+      cardBg: 'bg-gradient-to-r from-cyan-500/10 to-transparent border-cyan-500/20'
+    };
+    return {
+      icon: Info, color: 'text-indigo-400',
+      nodeBg: 'bg-indigo-500/20 border-indigo-400', shadow: 'shadow-[0_0_15px_rgba(99,102,241,0.6)]',
+      cardBg: 'bg-gradient-to-r from-indigo-500/10 to-transparent border-indigo-500/20'
+    };
   };
 
-  // Logic lọc sự kiện
   const filteredEvents = systemEvents.filter(ev => {
     if (filter === 'all') return true;
     if (filter === 'error') return ev.level === 'critical' || ev.level === 'warning';
@@ -28,98 +47,82 @@ const SystemLog = () => {
   });
 
   return (
-    <div className="p-4 space-y-6 pb-24 animate-in fade-in duration-500">
+    <div className="p-4 space-y-6 pb-24 min-h-screen">
 
-      {/* Header */}
-      <div className="flex flex-col space-y-1">
-        <h1 className="text-2xl font-bold text-white flex items-center gap-2">
-          <Clock size={24} className="text-emerald-500" />
-          Nhật Ký Hệ Thống
+      {/* Header với Gradient Text */}
+      <div className="flex flex-col space-y-1 animate-in slide-in-from-top-4 duration-500">
+        <h1 className="text-3xl font-extrabold flex items-center gap-3">
+          <div className="p-2 bg-emerald-500/10 rounded-xl border border-emerald-500/30 shadow-[0_0_15px_rgba(16,185,129,0.3)]">
+            <Clock size={24} className="text-emerald-400" />
+          </div>
+          <span className="bg-clip-text text-transparent bg-gradient-to-r from-emerald-400 via-cyan-400 to-blue-500">
+            Nhật Ký Hệ Thống
+          </span>
         </h1>
-        <p className="text-sm text-slate-400">
-          Truy vết hoạt động của trạm {deviceId || 'chưa kết nối'}
+        <p className="text-sm text-slate-400 ml-1">
+          Lịch sử vận hành trạm thủy canh {deviceId || ''}
         </p>
       </div>
 
-      {/* Thanh công cụ / Bộ lọc */}
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex flex-col space-y-3">
-        <label className="text-[10px] uppercase tracking-wider font-bold text-slate-500 flex items-center gap-1">
-          <Filter size={12} /> Lọc sự kiện theo:
+      {/* Thanh công cụ Neon */}
+      <div className="bg-slate-900/60 backdrop-blur-xl border border-slate-800 rounded-3xl p-4 flex flex-col space-y-3 shadow-lg animate-in fade-in duration-700">
+        <label className="text-[10px] uppercase tracking-widest font-bold text-slate-500 flex items-center gap-1.5 ml-1">
+          <Filter size={12} /> Bộ lọc thông minh
         </label>
         <div className="flex flex-wrap gap-2">
-          <button
-            onClick={() => setFilter('all')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${filter === 'all' ? 'bg-emerald-500 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}
-          >
-            Tất cả
-          </button>
-          <button
-            onClick={() => setFilter('error')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${filter === 'error' ? 'bg-rose-500 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}
-          >
-            Cảnh báo Lỗi
-          </button>
-          <button
-            onClick={() => setFilter('dosing')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${filter === 'dosing' ? 'bg-blue-500 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}
-          >
-            Dinh dưỡng & pH
-          </button>
-          <button
-            onClick={() => setFilter('info')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${filter === 'info' ? 'bg-slate-700 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}
-          >
-            Bơm nước & Khác
-          </button>
+          {/* Các nút bấm được thiết kế lại theo style Glow */}
+          <button onClick={() => setFilter('all')} className={`px-4 py-2 rounded-xl text-xs font-bold transition-all duration-300 ${filter === 'all' ? 'bg-emerald-500 text-slate-950 shadow-[0_0_15px_rgba(16,185,129,0.5)] scale-105' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}>Tất cả</button>
+          <button onClick={() => setFilter('error')} className={`px-4 py-2 rounded-xl text-xs font-bold transition-all duration-300 ${filter === 'error' ? 'bg-rose-500 text-white shadow-[0_0_15px_rgba(244,63,94,0.5)] scale-105' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}>Lỗi & Cảnh báo</button>
+          <button onClick={() => setFilter('dosing')} className={`px-4 py-2 rounded-xl text-xs font-bold transition-all duration-300 ${filter === 'dosing' ? 'bg-cyan-500 text-slate-950 shadow-[0_0_15px_rgba(6,182,212,0.5)] scale-105' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}>Dinh dưỡng & pH</button>
+          <button onClick={() => setFilter('info')} className={`px-4 py-2 rounded-xl text-xs font-bold transition-all duration-300 ${filter === 'info' ? 'bg-indigo-500 text-white shadow-[0_0_15px_rgba(99,102,241,0.5)] scale-105' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}>Hệ thống khác</button>
         </div>
       </div>
 
       {/* Khu vực Timeline */}
-      <div className="bg-slate-900 border border-slate-800 rounded-3xl p-5 md:p-6">
-        <div className="relative border-l-2 border-slate-800/80 ml-3 md:ml-4 space-y-8">
+      <div className="relative">
+        {/* Đường line dọc chạy dài mờ ảo */}
+        <div className="absolute left-[19px] top-4 bottom-0 w-0.5 bg-gradient-to-b from-slate-700 via-slate-800 to-transparent"></div>
 
+        <div className="space-y-6">
           {filteredEvents.length === 0 ? (
-            <div className="pl-6 flex flex-col items-center justify-center py-10 opacity-50">
-              <Calendar size={40} className="text-slate-500 mb-2" />
-              <p className="text-sm text-slate-400">Không có sự kiện nào phù hợp.</p>
+            <div className="pl-12 flex flex-col items-center justify-center py-16 opacity-50 animate-in zoom-in">
+              <Zap size={48} className="text-slate-600 mb-3" />
+              <p className="text-sm text-slate-400 font-medium">Hệ thống đang chờ lệnh mới...</p>
             </div>
           ) : (
             filteredEvents.map((ev, idx) => {
-              const { icon: Icon, color, bg } = getEventStyle(ev.level, ev.title);
+              const { icon: Icon, color, nodeBg, shadow, cardBg } = getEventStyle(ev.level, ev.title);
               const date = new Date(ev.timestamp);
 
               return (
-                <div key={idx} className="relative pl-6 md:pl-8 animate-in slide-in-from-bottom-2">
-                  {/* Điểm Neo (Node) trên trục thời gian */}
-                  <div className={`absolute -left-[13px] top-0 p-1.5 rounded-full border-2 ${bg} bg-slate-900 shadow-sm`}>
-                    <Icon size={14} className={color} />
+                <div
+                  key={idx}
+                  className="relative pl-12 group animate-in slide-in-from-bottom-4 fade-in"
+                  // Style inline này giúp các thẻ trượt lên lần lượt (Stagger effect)
+                  style={{ animationFillMode: 'both', animationDuration: '600ms', animationDelay: `${idx * 80}ms` }}
+                >
+                  {/* Điểm Neo (Node) - Có hiệu ứng Phóng to & Sáng rực khi Hover */}
+                  <div className={`absolute left-2.5 top-3 p-1.5 rounded-full border-2 ${nodeBg} bg-slate-950 ${shadow} transition-all duration-300 group-hover:scale-125 z-10`}>
+                    <Icon size={12} className={color} strokeWidth={2.5} />
                   </div>
 
-                  {/* Hộp nội dung sự kiện */}
-                  <div className="flex flex-col space-y-1.5">
-                    <div className="flex items-center justify-between">
-                      <h4 className={`text-sm font-bold ${color}`}>{ev.title}</h4>
-                      <span className="text-xs text-slate-500 font-medium bg-slate-800/50 px-2 py-0.5 rounded-md">
+                  {/* Hộp nội dung sự kiện - Có hiệu ứng Kính mờ (Glassmorphism) và nhảy nhẹ sang phải khi Hover */}
+                  <div className={`flex flex-col space-y-2 p-4 rounded-2xl border ${cardBg} backdrop-blur-md transition-all duration-300 group-hover:translate-x-1 hover:shadow-lg`}>
+                    <div className="flex items-start justify-between gap-2">
+                      <h4 className={`text-sm font-extrabold tracking-wide ${color}`}>{ev.title}</h4>
+                      <span className="text-[10px] text-slate-300 font-bold bg-slate-900/80 border border-slate-700/50 px-2 py-1 rounded-lg whitespace-nowrap shadow-sm">
                         {date.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
                       </span>
                     </div>
 
-                    {/* Ngày tháng nếu khác ngày hiện tại (Optional) */}
-                    <p className="text-xs text-slate-400/70">
-                      Ngày {date.toLocaleDateString('vi-VN')}
-                    </p>
-
-                    <div className="bg-slate-800/30 border border-slate-700/30 rounded-xl p-3 mt-1">
-                      <p className="text-xs text-slate-300 leading-relaxed whitespace-pre-line">
-                        {ev.message}
-                      </p>
+                    <div className="text-xs text-slate-300 leading-relaxed whitespace-pre-line font-medium opacity-90 group-hover:opacity-100 transition-opacity">
+                      {ev.message}
                     </div>
                   </div>
                 </div>
               );
             })
           )}
-
         </div>
       </div>
 
