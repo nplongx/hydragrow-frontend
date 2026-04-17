@@ -43,6 +43,12 @@ const Settings = () => {
     sampling_interval: 1000, publish_interval: 5000, moving_average_window: 10,
     enable_ph_sensor: true, enable_ec_sensor: true, enable_temp_sensor: true, enable_water_level_sensor: true,
     pump_a_capacity_ml_per_sec: 1.2, pump_b_capacity_ml_per_sec: 1.2, delay_between_a_and_b_sec: 10,
+
+    // Đã thêm cấu hình định lượng định kỳ
+    scheduled_dosing_enabled: false,
+    scheduled_dosing_interval_sec: 86400, // 1 Ngày
+    scheduled_dose_a_ml: 10.0,
+    scheduled_dose_b_ml: 10.0,
   });
 
   const [appSettings, setAppSettings] = useState({
@@ -94,7 +100,7 @@ const Settings = () => {
       const ts = new Date().toISOString();
 
       const devConf = {
-        device_id: devId, control_mode: config.control_mode, is_enabled: config.is_enabled, // Đã sửa boolean
+        device_id: devId, control_mode: config.control_mode, is_enabled: config.is_enabled,
         ec_target: Number(config.ec_target), ec_tolerance: Number(config.ec_tolerance),
         ph_target: Number(config.ph_target), ph_tolerance: Number(config.ph_tolerance),
         temp_target: Number(config.temp_target), temp_tolerance: Number(config.temp_tolerance),
@@ -106,15 +112,15 @@ const Settings = () => {
         device_id: devId, water_level_min: Number(config.water_level_min), water_level_target: Number(config.water_level_target),
         water_level_max: Number(config.water_level_max), water_level_drain: Number(config.water_level_drain),
         circulation_mode: config.circulation_mode, circulation_on_sec: Number(config.circulation_on_sec), circulation_off_sec: Number(config.circulation_off_sec),
-        water_level_tolerance: Number(config.water_level_tolerance), auto_refill_enabled: config.auto_refill_enabled, // Đã sửa boolean
-        auto_drain_overflow: config.auto_drain_overflow, auto_dilute_enabled: config.auto_dilute_enabled, // Đã sửa boolean
-        dilute_drain_amount_cm: Number(config.dilute_drain_amount_cm), scheduled_water_change_enabled: config.scheduled_water_change_enabled, // Đã sửa boolean
+        water_level_tolerance: Number(config.water_level_tolerance), auto_refill_enabled: config.auto_refill_enabled,
+        auto_drain_overflow: config.auto_drain_overflow, auto_dilute_enabled: config.auto_dilute_enabled,
+        dilute_drain_amount_cm: Number(config.dilute_drain_amount_cm), scheduled_water_change_enabled: config.scheduled_water_change_enabled,
         water_change_interval_sec: Number(config.water_change_interval_sec), scheduled_drain_amount_cm: Number(config.scheduled_drain_amount_cm),
         misting_on_duration_ms: Number(config.misting_on_duration_ms), misting_off_duration_ms: Number(config.misting_off_duration_ms), last_updated: ts
       };
 
       const safeConf = {
-        device_id: devId, emergency_shutdown: config.emergency_shutdown ? 1 : 0, // GIỮ NGUYÊN VÌ TRONG RUST LÀ Kiểu i64
+        device_id: devId, emergency_shutdown: config.emergency_shutdown,
         max_ec_limit: Number(config.max_ec_limit),
         min_ec_limit: Number(config.min_ec_limit), min_ph_limit: Number(config.min_ph_limit), max_ph_limit: Number(config.max_ph_limit),
         max_ec_delta: Number(config.max_ec_delta), max_ph_delta: Number(config.max_ph_delta), max_dose_per_cycle: Number(config.max_dose_per_cycle),
@@ -133,15 +139,23 @@ const Settings = () => {
         dosing_pump_capacity_ml_per_sec: Number(config.dosing_pump_capacity_ml_per_sec), soft_start_duration: Number(config.soft_start_duration),
         scheduled_mixing_interval_sec: Number(config.scheduled_mixing_interval_sec), scheduled_mixing_duration_sec: Number(config.scheduled_mixing_duration_sec),
         dosing_pwm_percent: Number(config.dosing_pwm_percent), osaka_mixing_pwm_percent: Number(config.osaka_mixing_pwm_percent),
-        osaka_misting_pwm_percent: Number(config.osaka_misting_pwm_percent), last_calibrated: ts
+        osaka_misting_pwm_percent: Number(config.osaka_misting_pwm_percent),
+
+        // Đã cập nhật mapping cho backend
+        scheduled_dosing_enabled: config.scheduled_dosing_enabled,
+        scheduled_dosing_interval_sec: Number(config.scheduled_dosing_interval_sec),
+        scheduled_dose_a_ml: Number(config.scheduled_dose_a_ml),
+        scheduled_dose_b_ml: Number(config.scheduled_dose_b_ml),
+
+        last_calibrated: ts
       };
 
       const sensConf = {
         device_id: devId, ph_v7: Number(config.ph_v7), ph_v4: Number(config.ph_v4), ec_factor: Number(config.ec_factor),
         ec_offset: Number(config.ec_offset), temp_offset: Number(config.temp_offset), temp_compensation_beta: Number(config.temp_compensation_beta),
         sampling_interval: Number(config.sampling_interval), publish_interval: Number(config.publish_interval), moving_average_window: Number(config.moving_average_window),
-        is_ph_enabled: config.enable_ph_sensor, is_ec_enabled: config.enable_ec_sensor, // Đã sửa boolean
-        is_temp_enabled: config.enable_temp_sensor, is_water_level_enabled: config.enable_water_level_sensor, last_calibrated: ts // Đã sửa boolean
+        is_ph_enabled: config.enable_ph_sensor, is_ec_enabled: config.enable_ec_sensor,
+        is_temp_enabled: config.enable_temp_sensor, is_water_level_enabled: config.enable_water_level_sensor, last_calibrated: ts
       };
 
       const unifiedPayload = { device_config: devConf, water_config: waterConf, safety_config: safeConf, sensor_calibration: sensConf, dosing_calibration: doseConf };
@@ -351,6 +365,23 @@ const Settings = () => {
               <InputGroup label="Bơm Sương Osaka (%)" step="1" value={config.osaka_misting_pwm_percent} onChange={(e: InputEvent) => setConfig({ ...config, osaka_misting_pwm_percent: parseInt(e.target.value) })} />
               <InputGroup label="Delay Khởi Động (ms)" step="100" value={config.soft_start_duration} onChange={(e: InputEvent) => setConfig({ ...config, soft_start_duration: parseInt(e.target.value) })} desc="Giảm Shock dòng tử" />
             </div>
+          </SubCard>
+
+          {/* MỚI: CHÂM PHÂN ĐỊNH KỲ */}
+          <SubCard title="Châm Phân Định Kỳ (Lịch Trình)" className="mt-4">
+            <div className="flex items-center justify-between mb-4">
+              <span className="text-xs font-bold text-slate-300 tracking-wide uppercase">Kích hoạt châm theo lịch</span>
+              <Switch isOn={config.scheduled_dosing_enabled} onClick={(val) => setConfig({ ...config, scheduled_dosing_enabled: val })} colorClass="bg-fuchsia-500 shadow-[0_0_10px_rgba(217,70,239,0.4)]" />
+            </div>
+            {config.scheduled_dosing_enabled && (
+              <div className="grid grid-cols-2 gap-4 animate-in fade-in bg-slate-900/50 p-4 rounded-xl border border-white/5 shadow-inner">
+                <div className="col-span-2">
+                  <InputGroup label="Chu kỳ châm (Giây) - VD: 86400 (1 Ngày)" value={config.scheduled_dosing_interval_sec} onChange={(e: InputEvent) => setConfig({ ...config, scheduled_dosing_interval_sec: parseInt(e.target.value) })} />
+                </div>
+                <InputGroup label="Lượng Bơm A (ml)" step="0.5" value={config.scheduled_dose_a_ml} onChange={(e: InputEvent) => setConfig({ ...config, scheduled_dose_a_ml: parseFloat(e.target.value) })} />
+                <InputGroup label="Lượng Bơm B (ml)" step="0.5" value={config.scheduled_dose_b_ml} onChange={(e: InputEvent) => setConfig({ ...config, scheduled_dose_b_ml: parseFloat(e.target.value) })} />
+              </div>
+            )}
           </SubCard>
 
           <SubCard title="Khuấy Trộn Phản Lực (Jet Mixing)" className="mt-4">
