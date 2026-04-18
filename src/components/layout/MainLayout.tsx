@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Outlet, NavLink, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard,
@@ -10,7 +10,8 @@ import {
   AlignLeft,
   MoreHorizontal,
   X,
-  Zap
+  Zap,
+  ActivityIcon
 } from 'lucide-react';
 
 const MainLayout = () => {
@@ -23,6 +24,7 @@ const MainLayout = () => {
     { path: '/', icon: LayoutDashboard, label: 'Tổng quan' },
     { path: '/control', icon: SlidersHorizontal, label: 'Điều khiển' },
     { path: '/analytics', icon: LineChart, label: 'Phân tích' },
+    { path: '/system-flow', icon: ActivityIcon, label: 'FSM' },
     { path: '/logs', icon: AlignLeft, label: 'Nhật ký' }
   ];
 
