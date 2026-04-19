@@ -4,8 +4,7 @@ import { Sprout, Calendar, Leaf, Play, StopCircle, CheckCircle2, History, Edit3,
 import toast from 'react-hot-toast';
 
 export const CropSeasons = () => {
-  const { activeSeason, history, isLoading, createSeason, endSeason, updateSeason
-  } = useCropSeason(); // Bạn cần viết thêm hàm updateSeason vào hook này
+  const { activeSeason, history, isLoading, createSeason, endSeason, updateSeason } = useCropSeason();
 
   // States cho Form tạo mới
   const [newName, setNewName] = useState('');
@@ -23,15 +22,16 @@ export const CropSeasons = () => {
     if (activeSeason && isEditing) {
       setEditName(activeSeason.name || '');
       setEditPlant(activeSeason.plant_type || '');
-      setEditDesc(activeSeason.description || ''); // Giả sử backend bạn có trường description
+      setEditDesc(activeSeason.description || '');
     }
   }, [activeSeason, isEditing]);
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newName) return;
-    // Giả sử hook createSeason của bạn có nhận tham số description
-    const success = await createSeason(newName, newPlant /*, newDesc */);
+
+    // 🟢 ĐÃ SỬA: Bỏ comment, truyền newDesc vào để lưu description xuống DB
+    const success = await createSeason(newName, newPlant, newDesc);
     if (success) {
       setNewName(''); setNewPlant(''); setNewDesc('');
       toast.success('Đã khởi tạo mùa vụ mới!');
@@ -44,7 +44,7 @@ export const CropSeasons = () => {
     if (success) setIsEditing(false);
   };
 
-  if (isLoading) {
+  if (isLoading && !activeSeason && history.length === 0) {
     return (
       <div className="flex justify-center items-center h-screen bg-slate-950">
         <div className="relative">
@@ -55,10 +55,13 @@ export const CropSeasons = () => {
     );
   }
 
+  // 🟢 ĐÃ SỬA: Lọc bỏ mùa vụ đang chạy (activeSeason) ra khỏi danh sách lịch sử để tránh hiển thị 2 lần
+  const filteredHistory = history.filter(season => season.id !== activeSeason?.id);
+
   return (
     <div className="p-4 md:p-6 max-w-3xl mx-auto space-y-6 pb-32 min-h-screen relative">
 
-      {/* 🟢 Hiệu ứng nền Mesh Gradient */}
+      {/* Hiệu ứng nền Mesh Gradient */}
       <div className="absolute top-0 right-0 w-[60%] h-64 bg-gradient-to-bl from-emerald-500/10 via-transparent to-transparent pointer-events-none blur-3xl"></div>
 
       {/* HEADER */}
@@ -118,8 +121,8 @@ export const CropSeasons = () => {
                   <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest pl-1">Ghi chú (Nhật ký sinh trưởng)</label>
                   <textarea rows={3} value={editDesc} onChange={(e) => setEditDesc(e.target.value)} placeholder="Nhập các sự kiện, thay đổi liều lượng phân bón..." className="w-full bg-slate-950/50 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-slate-300 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none resize-none"></textarea>
                 </div>
-                <button onClick={handleUpdate} className="w-full flex items-center justify-center gap-2 py-3 bg-emerald-600 hover:bg-emerald-500 text-slate-950 rounded-xl shadow-[0_0_15px_rgba(16,185,129,0.4)] font-black text-xs uppercase tracking-widest transition-all active:scale-[0.98]">
-                  <Save size={16} /> Lưu Thay Đổi
+                <button onClick={handleUpdate} disabled={isLoading} className={`w-full flex items-center justify-center gap-2 py-3 bg-emerald-600 hover:bg-emerald-500 text-slate-950 rounded-xl shadow-[0_0_15px_rgba(16,185,129,0.4)] font-black text-xs uppercase tracking-widest transition-all ${isLoading ? 'opacity-50 cursor-not-allowed' : 'active:scale-[0.98]'}`}>
+                  <Save size={16} /> {isLoading ? 'Đang lưu...' : 'Lưu Thay Đổi'}
                 </button>
               </div>
             ) : (
@@ -157,7 +160,8 @@ export const CropSeasons = () => {
               <div className="pt-2 border-t border-slate-800/50">
                 <button
                   onClick={() => { if (window.confirm('CẢNH BÁO: Hành động này sẽ đóng gói dữ liệu và không thể chỉnh sửa thêm. Xác nhận kết thúc mùa vụ?')) endSeason() }}
-                  className="w-full flex items-center justify-center gap-2 py-3 bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 border border-rose-500/30 rounded-xl transition-all font-black text-xs uppercase tracking-widest hover:shadow-[0_0_15px_rgba(244,63,94,0.3)] active:scale-[0.98]"
+                  disabled={isLoading}
+                  className={`w-full flex items-center justify-center gap-2 py-3 bg-rose-500/10 text-rose-500 border border-rose-500/30 rounded-xl transition-all font-black text-xs uppercase tracking-widest ${isLoading ? 'opacity-50 cursor-not-allowed' : 'hover:bg-rose-500/20 hover:shadow-[0_0_15px_rgba(244,63,94,0.3)] active:scale-[0.98]'}`}
                 >
                   <StopCircle size={16} /> Kết thúc Mùa vụ Hiện tại
                 </button>
@@ -183,8 +187,13 @@ export const CropSeasons = () => {
                 <textarea rows={2} placeholder="Nguồn gốc hạt giống, EC mục tiêu khởi điểm..." value={newDesc} onChange={(e) => setNewDesc(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm text-slate-300 placeholder-slate-600 focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 transition-all outline-none resize-none"></textarea>
               </div>
             </div>
-            <button type="submit" className="w-full py-3.5 bg-gradient-to-r from-emerald-500 to-cyan-500 text-slate-950 rounded-xl shadow-[0_10px_20px_rgba(6,182,212,0.3)] hover:shadow-[0_10px_30px_rgba(6,182,212,0.5)] font-black text-[13px] uppercase tracking-widest hover:scale-[1.02] active:scale-95 transition-all">
-              Khởi Tạo Ngay
+            {/* 🟢 ĐÃ SỬA: Khóa nút khi đang load (chống double-click tạo 2 mùa) */}
+            <button
+              type="submit"
+              disabled={isLoading}
+              className={`w-full py-3.5 bg-gradient-to-r from-emerald-500 to-cyan-500 text-slate-950 rounded-xl shadow-[0_10px_20px_rgba(6,182,212,0.3)] font-black text-[13px] uppercase tracking-widest transition-all ${isLoading ? 'opacity-50 cursor-not-allowed' : 'hover:shadow-[0_10px_30px_rgba(6,182,212,0.5)] hover:scale-[1.02] active:scale-95'}`}
+            >
+              {isLoading ? 'Đang Khởi Tạo...' : 'Khởi Tạo Ngay'}
             </button>
           </form>
         )}
@@ -200,13 +209,14 @@ export const CropSeasons = () => {
         </div>
 
         <div className="divide-y divide-white/5">
-          {history.length === 0 ? (
+          {/* 🟢 ĐÃ SỬA: Render từ mảng filteredHistory thay vì history gốc */}
+          {filteredHistory.length === 0 ? (
             <div className="p-10 flex flex-col items-center justify-center text-slate-500 opacity-60">
               <History size={40} className="mb-3" />
               <p className="text-xs font-bold uppercase tracking-widest">Chưa có hồ sơ lưu trữ.</p>
             </div>
           ) : (
-            history.map((season, idx) => (
+            filteredHistory.map((season) => (
               <div key={season.id} className="p-5 hover:bg-slate-800/30 transition-colors group cursor-default">
                 <div className="flex justify-between items-start mb-3">
                   <h3 className="font-bold text-slate-200 group-hover:text-emerald-400 transition-colors">{season.name}</h3>

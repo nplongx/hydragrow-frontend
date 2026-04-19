@@ -85,7 +85,7 @@ export const useCropSeason = () => {
     return false;
   };
 
-  // Hàm Update mùa vụ ĐANG CHẠY
+  // Hàm Update mùa vụscheduled_dose_a_mlAPI chưa sẵn sàng ĐANG CHẠY
   const updateSeason = async (name: string, plantType: string, description: string) => {
     if (!deviceId || !settings?.backend_url) return false;
     try {
