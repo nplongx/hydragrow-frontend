@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import {
   Settings2, FlaskConical, Droplets, Wind, Power, AlertTriangle, Timer, Activity, RefreshCw, Zap,
   Waves

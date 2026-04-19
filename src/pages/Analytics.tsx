@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import {
   XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, AreaChart, Area
 } from 'recharts';
-import { LineChart as ChartIcon, Clock, Filter, Activity, Thermometer, Droplets, Cpu, Zap, ActivitySquare, Waves } from 'lucide-react';
+import { LineChart as ChartIcon, Clock, Filter, Activity, Thermometer, Droplets, Cpu, ActivitySquare, Waves } from 'lucide-react';
 import { useDeviceContext } from '../context/DeviceContext';
 import { useCropSeason } from '../hooks/useCropSeason';
 import { fetch } from '@tauri-apps/plugin-http';
