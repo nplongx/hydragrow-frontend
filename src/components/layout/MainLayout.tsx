@@ -24,7 +24,7 @@ const MainLayout = () => {
     { path: '/', icon: LayoutDashboard, label: 'Tổng quan' },
     { path: '/control', icon: SlidersHorizontal, label: 'Điều khiển' },
     { path: '/analytics', icon: LineChart, label: 'Phân tích' },
-    { path: '/system-flow', icon: ActivityIcon, label: 'FSM' },
+    // { path: '/system-flow', icon: ActivityIcon, label: 'FSM' },
     { path: '/logs', icon: AlignLeft, label: 'Nhật ký' }
   ];
 

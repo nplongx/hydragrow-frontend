@@ -10,14 +10,21 @@ export const FsmStatusBadge: React.FC<{ state?: string }> = ({ state }) => {
     </span>
   );
 
+  // Xử lý báo lỗi hệ thống có kèm lý do
   if (rawState.startsWith("SystemFault:")) {
     const reason = rawState.replace("SystemFault:", "");
     return renderBadge("bg-red-500/20 border border-red-500/50", "text-red-400", `🚨 Lỗi: ${reason}`);
   }
 
+  // 🟢 MỚI: Xử lý Dừng Khẩn Cấp có kèm lý do (Khớp với code ESP32 mới)
+  if (rawState.startsWith("EmergencyStop:")) {
+    const reason = rawState.replace("EmergencyStop:", "");
+    return renderBadge("bg-red-600 border border-red-500 animate-pulse", "text-white", `🛑 DỪNG KHẨN CẤP: ${reason}`);
+  }
+
   switch (rawState) {
     case "Monitoring": return renderBadge("bg-emerald-500/20 border border-emerald-500/50", "text-emerald-400", "🟢 Đang Giám Sát");
-    case "EmergencyStop": return renderBadge("bg-red-600 border border-red-500", "text-white", "🛑 DỪNG KHẨN CẤP");
+    case "EmergencyStop": return renderBadge("bg-red-600 border border-red-500", "text-white", "🛑 DỪNG KHẨN CẤP"); // Fallback cho code cũ
     case "WaterRefilling": return renderBadge("bg-blue-500/20 border border-blue-500/50", "text-blue-400", "💧 Đang Cấp Nước");
     case "WaterDraining": return renderBadge("bg-cyan-500/20 border border-cyan-500/50", "text-cyan-400", "🌊 Đang Xả Nước");
     case "DosingPumpA": return renderBadge("bg-orange-500/20 border border-orange-500/50", "text-orange-400", "🧪 Đang Châm Phân A");
