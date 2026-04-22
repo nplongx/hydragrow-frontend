@@ -22,7 +22,7 @@ export interface PumpStatus {
 /**
  * Dữ liệu thu thập từ các cảm biến của thiết bị
  */
-export interface SensorData {
+export interface SensorData extends DeviceHealth {
   device_id: string;
   ec_value: number;        // Giá trị EC (Độ dẫn điện)
   ph_value: number;        // Giá trị pH
@@ -30,6 +30,11 @@ export interface SensorData {
   water_level: number;     // Mực nước (cm)
   pump_status: PumpStatus; // Trạng thái bơm đồng bộ từ FSM
   time: string;       // Thời gian ghi nhận dữ liệu
+  rssi?: number;
+  free_heap?: number;
+  uptime?: number;
+  err_water?: boolean;
+  is_continuous?: boolean;
 }
 
 /**
@@ -174,4 +179,14 @@ export interface CropSeason {
   start_time: string;
   end_time: string | null;
   status: 'active' | 'completed';
+}
+
+export interface DeviceHealth {
+  rssi?: number;
+  free_heap?: number;
+  uptime?: number;
+}
+
+export interface ControllerData extends DeviceHealth {
+  // Có thể chứa thêm trạng thái FSM hoặc các config khác nếu cần
 }

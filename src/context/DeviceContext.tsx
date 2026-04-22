@@ -12,7 +12,7 @@ interface DeviceContextType {
   fsmState: string;
   isLoading: boolean;
   updatePumpStatusOptimistically: (stateKey: string, isNowOn: boolean) => void;
-  systemEvents: any
+  systemEvents: any[];
 }
 
 const DeviceContext = createContext<DeviceContextType | undefined>(undefined);
@@ -24,7 +24,7 @@ export const DeviceProvider = ({ children }: { children: ReactNode }) => {
 
   const [deviceStatus, setDeviceStatus] = useState<StatusPayload>({ is_online: false, last_seen: '' });
   const [fsmState, setFsmState] = useState<string>("Offline");
-  const [systemEvents, setSystemEvents] = useState<any[]>([]); // 🟢 THÊM STATE NÀY
+  const [systemEvents, setSystemEvents] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   // ==========================================
@@ -38,8 +38,6 @@ export const DeviceProvider = ({ children }: { children: ReactNode }) => {
     }
     sensorTimeoutRef.current = setTimeout(() => {
       setDeviceStatus({ is_online: false, last_seen: '' });
-
-      // ++ THÊM 2 DÒNG NÀY ĐỂ XÓA DỮ LIỆU CŨ ++
       setFsmState("Offline");
       setSensorData(prev => prev ? { ...prev, pump_status: {} as any } : prev);
 
@@ -99,7 +97,6 @@ export const DeviceProvider = ({ children }: { children: ReactNode }) => {
           if (res.ok) {
             const json = await res.json();
             if (json.data && Array.isArray(json.data)) {
-              // Nạp dữ liệu cũ vào RAM
               setSystemEvents(json.data);
             }
           }
@@ -108,7 +105,6 @@ export const DeviceProvider = ({ children }: { children: ReactNode }) => {
         }
       };
 
-      // Gọi hàm hút dữ liệu ngay lập tức
       loadEventHistory();
 
       const connectWs = () => {
@@ -129,8 +125,7 @@ export const DeviceProvider = ({ children }: { children: ReactNode }) => {
           try {
             const data = JSON.parse(event.data);
 
-            // 🟢 TÍCH HỢP ĐÓN "DI CHÚC" (LWT) TỪ ESP32
-            // Nếu Backend parse message từ topic "status" và trả về dạng "status" hoặc alert
+            // 1. XỬ LÝ TRẠNG THÁI ONLINE/OFFLINE (LWT HOẶC STATUS)
             if (data.type === 'status' || (data.type === 'alert' && data.payload.title === 'Trạng thái thiết bị')) {
               const isOnline = data.type === 'status' ? data.payload.online : data.payload.level === 'success';
 
@@ -140,19 +135,18 @@ export const DeviceProvider = ({ children }: { children: ReactNode }) => {
                 toast.success("Thiết bị đã trực tuyến trở lại!");
                 resetSensorTimeout();
               } else {
-                toast.error("Đã ngắt kết nối mạch ESP32 (LWT)!");
+                toast.error("Đã ngắt kết nối mạch điều khiển!");
                 if (sensorTimeoutRef.current) clearTimeout(sensorTimeoutRef.current);
-
                 setFsmState("Offline");
                 setSensorData(prev => prev ? { ...prev, pump_status: {} as any } : prev);
               }
               return;
             }
 
+            // 2. XỬ LÝ CẢNH BÁO (ALERTS & FSM_UPDATE)
             if (data.type === 'alert') {
               const alert = data.payload;
 
-              // 🟢 THÊM DÒNG NÀY: Đẩy sự kiện mới nhất lên đầu mảng (chỉ giữ 50 cái)
               if (alert.level !== 'FSM_UPDATE') {
                 setSystemEvents(prev => [alert, ...prev].slice(0, 50));
               }
@@ -161,6 +155,7 @@ export const DeviceProvider = ({ children }: { children: ReactNode }) => {
                 setFsmState(alert.message);
                 return;
               }
+
               switch (alert.level) {
                 case 'critical': toast.error(`🚨 ${alert.title}\n${alert.message}`, { duration: 10000 }); break;
                 case 'warning': toast.error(`⚠️ ${alert.title}\n${alert.message}`, { duration: 6000 }); break;
@@ -170,13 +165,47 @@ export const DeviceProvider = ({ children }: { children: ReactNode }) => {
               return;
             }
 
+            // 3. XỬ LÝ DỮ LIỆU CẢM BIẾN & THÔNG SỐ SỨC KHỎE
             if (data.type === 'sensor_update') {
-              setSensorData(data.payload.data || data.payload);
-              setDeviceStatus(prev => !prev.is_online ? { is_online: true, last_seen: new Date().toISOString() } : prev);
+              const incomingPayload = data.payload.data || data.payload;
 
-              // Nhận data tức là mạch còn sống -> Cập nhật lại bộ đếm Watchdog
+              setSensorData(prev => {
+                // Nếu chưa có data gì thì lấy luôn cái mới
+                if (!prev) return incomingPayload;
+
+                // 🟢 GỘP DỮ LIỆU: Giữ lại những trường đang có nếu bản tin mới không gửi (để hỗ trợ việc Controller và Sensor gửi riêng rẽ)
+                return {
+                  ...prev,
+                  ...incomingPayload,
+                  // Đảm bảo không bị mất các trường option nếu payload mới thiếu
+                  rssi: incomingPayload.rssi !== undefined ? incomingPayload.rssi : prev.rssi,
+                  free_heap: incomingPayload.free_heap !== undefined ? incomingPayload.free_heap : prev.free_heap,
+                  uptime: incomingPayload.uptime !== undefined ? incomingPayload.uptime : prev.uptime,
+                  err_water: incomingPayload.err_water !== undefined ? incomingPayload.err_water : prev.err_water,
+                };
+              });
+
+              setDeviceStatus(prev => !prev.is_online ? { is_online: true, last_seen: new Date().toISOString() } : prev);
               resetSensorTimeout();
             }
+
+            // 4. XỬ LÝ ĐỘC LẬP BẢN TIN HEALTH CỦA CONTROLLER (Nếu Backend tách riêng)
+            if (data.type === 'device_health') {
+              const healthData = data.payload;
+              setSensorData(prev => {
+                if (!prev) return prev;
+                return {
+                  ...prev,
+                  rssi: healthData.rssi !== undefined ? healthData.rssi : prev.rssi,
+                  free_heap: healthData.free_heap !== undefined ? healthData.free_heap : prev.free_heap,
+                  uptime: healthData.uptime_sec !== undefined ? healthData.uptime_sec : prev.uptime,
+                  // Nếu Controller gửi pump_status đính kèm trong bản tin health thì chèn vào luôn
+                  pump_status: healthData.pump_status ? healthData.pump_status : prev.pump_status,
+                };
+              });
+              resetSensorTimeout();
+            }
+
           } catch (err) {
             console.error("Lỗi parse WS Message:", err);
           }
