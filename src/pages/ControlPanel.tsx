@@ -330,7 +330,7 @@ const AdvancedDeviceControl = ({
 
 // --- Bảng Điều Khiển Chính ---
 const ControlPanel = () => {
-  const { deviceId, sensorData, deviceStatus, isLoading, updatePumpStatusOptimistically, fsmState, settings } = useDeviceContext();
+  const { deviceId, sensorData, deviceStatus, isControllerStatusKnown, isLoading, updatePumpStatusOptimistically, fsmState, settings } = useDeviceContext();
   const { isProcessing, resetFault } = useDeviceControl(deviceId || "");
 
   if (isLoading || !sensorData) {
@@ -342,7 +342,8 @@ const ControlPanel = () => {
   }
 
   const isOnline = deviceStatus?.is_online || false;
-  const pumps: PumpStatus = isOnline ? (sensorData.pump_status || {}) : {};
+  const showDisconnected = isControllerStatusKnown && !isOnline;
+  const pumps: Partial<PumpStatus> = isOnline ? (sensorData.pump_status || {}) : {};
 
   const isEmergency = Boolean(
     fsmState?.toUpperCase().includes('EMERGENCY') ||
@@ -377,7 +378,7 @@ const ControlPanel = () => {
         </button>
       </div>
 
-      {!isOnline && (
+      {showDisconnected && (
         <div className="bg-rose-500/10 backdrop-blur-md border border-rose-500/30 rounded-2xl p-4 flex items-center gap-3 text-rose-400 shadow-[0_0_20px_rgba(244,63,94,0.15)] relative z-10 animate-in zoom-in">
           <AlertTriangle size={24} className="animate-pulse" />
           <div>
@@ -414,7 +415,7 @@ const ControlPanel = () => {
           <AdvancedDeviceControl deviceId={deviceId} pumpId="PUMP_A" title="Bơm Phân A" icon={FlaskConical} colorTheme="orange" currentStatus={pumps.pump_a} allowPwm={true} updatePumpStatusOptimistically={updatePumpStatusOptimistically} isOnline={isOnline} isEmergency={isEmergency} />
           <AdvancedDeviceControl deviceId={deviceId} pumpId="PUMP_B" title="Bơm Phân B" icon={FlaskConical} colorTheme="orange" currentStatus={pumps.pump_b} allowPwm={true} updatePumpStatusOptimistically={updatePumpStatusOptimistically} isOnline={isOnline} isEmergency={isEmergency} />
           <AdvancedDeviceControl deviceId={deviceId} pumpId="PH_UP" title="Bơm Tăng pH" icon={Activity} colorTheme="purple" currentStatus={pumps.ph_up} allowPwm={true} updatePumpStatusOptimistically={updatePumpStatusOptimistically} isOnline={isOnline} isEmergency={isEmergency} />
-          <AdvancedDeviceControl deviceId={deviceId} pumpId="PH_DOWN" title="Bơm Giảm pH" icon={Activity} colorTheme="purple" currentStatus={pumps.ph_down} allowPwm={true} updatePumpStatusOptimistically={updatePumpStatusOptimistically} isOnline={isEmergency} isEmergency={isEmergency} />
+          <AdvancedDeviceControl deviceId={deviceId} pumpId="PH_DOWN" title="Bơm Giảm pH" icon={Activity} colorTheme="purple" currentStatus={pumps.ph_down} allowPwm={true} updatePumpStatusOptimistically={updatePumpStatusOptimistically} isOnline={isOnline} isEmergency={isEmergency} />
         </div>
       </div>
 
