@@ -1,4 +1,3 @@
-import React from 'react';
 import { Droplets, Thermometer, Activity, Waves, Settings, Zap, Cpu, Wifi, HardDrive, Clock, AlertTriangle, Server, RadioReceiver } from 'lucide-react';
 import { useDeviceContext } from '../context/DeviceContext';
 import { useDeviceControl } from '../hooks/useDeviceControl';
@@ -33,33 +32,30 @@ const getWifiColor = (rssi?: number) => {
   return "text-rose-500";
 };
 
-// 🟢 COMPONENT NHỎ HIỂN THỊ THANH SỨC KHỎE
 const HealthBar = ({ title, icon: Icon, data }: { title: string, icon: any, data?: any }) => (
-  <div className="flex flex-col gap-1.5 bg-slate-900/40 border border-slate-800/50 p-2.5 rounded-xl">
+  <div className="flex flex-col gap-2 bg-slate-900/60 border border-slate-800/80 p-3 rounded-2xl shadow-inner">
     <div className="flex items-center gap-1.5 text-slate-400">
-      <Icon size={12} className="text-slate-300" />
-      <span className="text-[9px] font-black uppercase tracking-widest">{title}</span>
+      <Icon size={14} className={data ? "text-indigo-400" : "text-slate-600"} />
+      <span className="text-[10px] font-black uppercase tracking-widest">{title}</span>
     </div>
     <div className="flex items-center gap-2 overflow-x-auto hide-scrollbar">
-      <div className="flex items-center gap-1 px-2 py-0.5 rounded border border-slate-800/80 bg-slate-950/50 text-[10px] font-mono text-slate-300 whitespace-nowrap">
-        <Wifi size={10} className={getWifiColor(data?.rssi)} />
+      <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg border border-slate-800/80 bg-slate-950/80 text-[10px] font-mono text-slate-300 whitespace-nowrap">
+        <Wifi size={12} className={getWifiColor(data?.rssi)} />
         {data?.rssi ? `${data.rssi} dBm` : '--'}
       </div>
-      <div className="flex items-center gap-1 px-2 py-0.5 rounded border border-slate-800/80 bg-slate-950/50 text-[10px] font-mono text-slate-300 whitespace-nowrap">
-        <HardDrive size={10} className="text-cyan-400" />
+      <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg border border-slate-800/80 bg-slate-950/80 text-[10px] font-mono text-slate-300 whitespace-nowrap">
+        <HardDrive size={12} className="text-cyan-400" />
         {data?.free_heap ? `${(data.free_heap / 1024).toFixed(1)} KB` : '--'}
       </div>
-      <div className="flex items-center gap-1 px-2 py-0.5 rounded border border-slate-800/80 bg-slate-950/50 text-[10px] font-mono text-slate-300 whitespace-nowrap">
-        <Clock size={10} className="text-indigo-400" />
-        {formatUptime(data?.uptime)}
+      <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg border border-slate-800/80 bg-slate-950/80 text-[10px] font-mono text-slate-300 whitespace-nowrap">
+        <Clock size={12} className="text-emerald-400" />
+        {formatUptime(data?.uptime || data?.uptime_sec)}
       </div>
     </div>
   </div>
 );
 
 const Dashboard = () => {
-  // LƯU Ý: Bạn cần export thêm controllerHealth từ useDeviceContext
-  // Nếu chưa có, tạm thời để `controllerHealth = {}` hoặc `deviceStatus`
   const { deviceId, sensorData, deviceStatus, controllerHealth, fsmState, isLoading, updatePumpStatusOptimistically } = useDeviceContext();
   const { isProcessing, togglePump } = useDeviceControl(deviceId || "");
 
@@ -94,20 +90,20 @@ const Dashboard = () => {
   }
 
   const isOnline = deviceStatus?.is_online;
-  const pumps = isOnline ? (sensorData.pump_status || {}) : {};
+  // 🟢 Đã fix lỗi Type Checking bằng cách khai báo kiểu any
+  const pumps: any = isOnline && sensorData.pump_status ? sensorData.pump_status : {};
 
-  const handleToggle = async (pumpId: string, currentStatus: boolean | undefined) => {
+  const handleToggle = async (pumpId: string, currentStatus: boolean) => {
     const targetAction = currentStatus ? 'off' : 'on';
-    updatePumpStatusOptimistically(pumpId, targetAction);
+    updatePumpStatusOptimistically(pumpId, currentStatus);
     const success = await togglePump(pumpId, targetAction);
-    if (!success) updatePumpStatusOptimistically(pumpId, currentStatus ? 'on' : 'off');
+    if (!success) updatePumpStatusOptimistically(pumpId, currentStatus);
   };
 
   return (
     <div className="p-4 space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700 pb-32 relative min-h-screen">
       <div className="absolute top-0 left-0 w-full h-64 bg-gradient-to-b from-emerald-500/10 via-transparent to-transparent pointer-events-none blur-3xl"></div>
 
-      {/* 1. HEADER & DUAL HEALTH BARS */}
       <div className="flex flex-col relative z-10">
         <div className="flex items-start justify-between mb-4">
           <div className="space-y-1">
@@ -128,16 +124,14 @@ const Dashboard = () => {
           </div>
         </div>
 
-        {/* 🟢 KHU VỰC HIỂN THỊ SỨC KHỎE 2 NODE ĐỘC LẬP */}
         {isOnline && (
-          <div className="grid grid-cols-2 gap-3 mt-2">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-2">
             <HealthBar title="Controller Node" icon={Server} data={controllerHealth} />
             <HealthBar title="Sensor Node" icon={RadioReceiver} data={sensorData} />
           </div>
         )}
       </div>
 
-      {/* 2. THẺ GIÁM SÁT FSM */}
       <div className="relative bg-slate-900/60 backdrop-blur-2xl border border-white/10 rounded-[2rem] p-5 shadow-[0_20px_40px_rgba(0,0,0,0.4)] overflow-hidden group">
         <div className="absolute -top-10 -right-10 w-32 h-32 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none group-hover:bg-emerald-500/20 transition-colors duration-500"></div>
         <div className="absolute -bottom-10 -left-10 w-32 h-32 bg-blue-500/10 rounded-full blur-3xl pointer-events-none group-hover:bg-blue-500/20 transition-colors duration-500"></div>
@@ -175,7 +169,6 @@ const Dashboard = () => {
         </div>
       </div>
 
-      {/* 3. LƯỚI CẢM BIẾN */}
       <div className="grid grid-cols-2 gap-4 relative z-10">
         <SensorBentoCard title="Dinh dưỡng (EC)" value={sensorData.ec_value} unit="mS/cm" icon={Activity} theme="blue" />
         <SensorBentoCard title="Độ pH" value={sensorData.ph_value} icon={Droplets} theme="fuchsia" />
@@ -199,7 +192,6 @@ const Dashboard = () => {
         </div>
       </div>
 
-      {/* 4. QUICK ACTIONS */}
       <div className="bg-slate-900/40 backdrop-blur-lg border border-slate-800/80 rounded-[2rem] p-5 relative z-10">
         <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-4 flex items-center gap-2">
           <Zap size={14} className="text-amber-500" /> Cưỡng chế nhanh

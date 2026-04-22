@@ -9,6 +9,7 @@ interface DeviceContextType {
   settings: any;
   sensorData: SensorData | null;
   deviceStatus: StatusPayload;
+  controllerHealth: any;
   fsmState: string;
   isLoading: boolean;
   updatePumpStatusOptimistically: (stateKey: string, isNowOn: boolean) => void;
@@ -20,28 +21,45 @@ const DeviceContext = createContext<DeviceContextType | undefined>(undefined);
 export const DeviceProvider = ({ children }: { children: ReactNode }) => {
   const [deviceId, setDeviceId] = useState<string | null>(null);
   const [settings, setSettings] = useState<any>(null);
+
+  // Dù tên là sensorData nhưng giờ nó đóng vai trò là Global Device State (chứa cả sensor + pump)
   const [sensorData, setSensorData] = useState<SensorData | null>(null);
 
+  const [controllerHealth, setControllerHealth] = useState<any>(null);
+
+  // deviceStatus bây giờ CHỈ đại diện cho MẠCH ĐIỀU KHIỂN (Controller)
   const [deviceStatus, setDeviceStatus] = useState<StatusPayload>({ is_online: false, last_seen: '' });
   const [fsmState, setFsmState] = useState<string>("Offline");
   const [systemEvents, setSystemEvents] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   // ==========================================
-  // 🟢 WATCHDOG: Bảo vệ phía Client (15 giây)
+  // 🟢 TÁCH 2 WATCHDOG RIÊNG BIỆT CHO 2 NODE
   // ==========================================
+  const controllerTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const sensorTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  const resetSensorTimeout = useCallback(() => {
-    if (sensorTimeoutRef.current) {
-      clearTimeout(sensorTimeoutRef.current);
-    }
-    sensorTimeoutRef.current = setTimeout(() => {
+  // 1. Xử lý khi Controller mất tín hiệu
+  const resetControllerTimeout = useCallback(() => {
+    if (controllerTimeoutRef.current) clearTimeout(controllerTimeoutRef.current);
+
+    controllerTimeoutRef.current = setTimeout(() => {
       setDeviceStatus({ is_online: false, last_seen: '' });
       setFsmState("Offline");
+      // Mất controller thì không biết trạng thái bơm, clear pump_status
       setSensorData(prev => prev ? { ...prev, pump_status: {} as any } : prev);
+      toast.error("Mất tín hiệu từ Trạm Điều Khiển (Controller)!");
+    }, 15000);
+  }, []);
 
-      toast.error("Mất tín hiệu từ thiết bị! (Timeout)");
+  // 2. Xử lý khi Sensor Node mất tín hiệu
+  const resetSensorTimeout = useCallback(() => {
+    if (sensorTimeoutRef.current) clearTimeout(sensorTimeoutRef.current);
+
+    sensorTimeoutRef.current = setTimeout(() => {
+      // Chỉ bật cờ lỗi nước để làm mờ UI cảm biến, KHÔNG ĐÁNH SẬP is_online của toàn hệ thống
+      setSensorData(prev => prev ? { ...prev, err_water: true } : prev);
+      toast.error("Mất kết nối với Mạch Cảm Biến!");
     }, 15000);
   }, []);
 
@@ -72,40 +90,31 @@ export const DeviceProvider = ({ children }: { children: ReactNode }) => {
 
     const setupConnection = async () => {
       setIsLoading(true);
+      // Fetch data mồi...
       try {
         const url = `${settings.backend_url}/api/devices/${deviceId}/sensors/latest`;
         const response = await fetch(url, {
           method: 'GET',
           headers: { 'Content-Type': 'application/json', 'X-API-Key': settings.api_key }
         });
-
         if (response.ok) {
           const resData = await response.json();
           setSensorData(resData.data || resData);
         }
-      } catch (err) {
-        console.warn("Chưa lấy được data khởi tạo:", err);
-      }
+      } catch (err) { /* empty */ }
       setIsLoading(false);
 
-      const loadEventHistory = async () => {
-        try {
-          const res = await fetch(`${settings.backend_url}/api/devices/${deviceId}/events`, {
-            method: 'GET',
-            headers: { 'X-API-Key': settings.api_key || '' }
-          });
-          if (res.ok) {
-            const json = await res.json();
-            if (json.data && Array.isArray(json.data)) {
-              setSystemEvents(json.data);
-            }
-          }
-        } catch (error) {
-          console.error("Lỗi nạp lịch sử sự kiện:", error);
+      // Fetch events...
+      try {
+        const res = await fetch(`${settings.backend_url}/api/devices/${deviceId}/events`, {
+          method: 'GET',
+          headers: { 'X-API-Key': settings.api_key || '' }
+        });
+        if (res.ok) {
+          const json = await res.json();
+          if (json.data && Array.isArray(json.data)) setSystemEvents(json.data);
         }
-      };
-
-      loadEventHistory();
+      } catch (err) { /* empty */ }
 
       const connectWs = () => {
         const cleanBaseUrl = settings.backend_url.replace(/\/$/, "");
@@ -114,6 +123,8 @@ export const DeviceProvider = ({ children }: { children: ReactNode }) => {
 
         ws.onopen = () => {
           console.log('🟢 [GlobalContext] Đã kết nối tới Server WebSocket');
+          // Khởi động cả 2 bộ đếm an toàn
+          resetControllerTimeout();
           resetSensorTimeout();
 
           pingInterval = setInterval(() => {
@@ -125,33 +136,34 @@ export const DeviceProvider = ({ children }: { children: ReactNode }) => {
           try {
             const data = JSON.parse(event.data);
 
-            // 1. XỬ LÝ TRẠNG THÁI ONLINE/OFFLINE (LWT HOẶC STATUS)
+            // =====================================
+            // 1. CẢNH BÁO LWT TỪ CONTROLLER
+            // =====================================
             if (data.type === 'status' || (data.type === 'alert' && data.payload.title === 'Trạng thái thiết bị')) {
               const isOnline = data.type === 'status' ? data.payload.online : data.payload.level === 'success';
 
               setDeviceStatus({ is_online: isOnline, last_seen: new Date().toISOString() });
 
               if (isOnline) {
-                toast.success("Thiết bị đã trực tuyến trở lại!");
-                resetSensorTimeout();
+                toast.success("Trạm Điều Khiển đã trực tuyến trở lại!");
+                resetControllerTimeout();
               } else {
-                toast.error("Đã ngắt kết nối mạch điều khiển!");
-                if (sensorTimeoutRef.current) clearTimeout(sensorTimeoutRef.current);
+                toast.error("Đã ngắt kết nối Trạm Điều Khiển (LWT)!");
+                if (controllerTimeoutRef.current) clearTimeout(controllerTimeoutRef.current);
                 setFsmState("Offline");
                 setSensorData(prev => prev ? { ...prev, pump_status: {} as any } : prev);
               }
               return;
             }
 
-            // 2. XỬ LÝ CẢNH BÁO (ALERTS & FSM_UPDATE)
+            // =====================================
+            // 2. SỰ KIỆN ALERTS & FSM
+            // =====================================
             if (data.type === 'alert') {
               const alert = data.payload;
-
               if (alert.level !== 'FSM_UPDATE') {
                 setSystemEvents(prev => [alert, ...prev].slice(0, 50));
-              }
-
-              if (alert.level === 'FSM_UPDATE') {
+              } else {
                 setFsmState(alert.message);
                 return;
               }
@@ -165,45 +177,51 @@ export const DeviceProvider = ({ children }: { children: ReactNode }) => {
               return;
             }
 
-            // 3. XỬ LÝ DỮ LIỆU CẢM BIẾN & THÔNG SỐ SỨC KHỎE
+            // =====================================
+            // 3. LUỒNG SENSOR (Từ Cảm Biến)
+            // =====================================
             if (data.type === 'sensor_update') {
               const incomingPayload = data.payload.data || data.payload;
 
               setSensorData(prev => {
-                // Nếu chưa có data gì thì lấy luôn cái mới
                 if (!prev) return incomingPayload;
-
-                // 🟢 GỘP DỮ LIỆU: Giữ lại những trường đang có nếu bản tin mới không gửi (để hỗ trợ việc Controller và Sensor gửi riêng rẽ)
                 return {
                   ...prev,
-                  ...incomingPayload,
-                  // Đảm bảo không bị mất các trường option nếu payload mới thiếu
-                  rssi: incomingPayload.rssi !== undefined ? incomingPayload.rssi : prev.rssi,
-                  free_heap: incomingPayload.free_heap !== undefined ? incomingPayload.free_heap : prev.free_heap,
-                  uptime: incomingPayload.uptime !== undefined ? incomingPayload.uptime : prev.uptime,
+                  temp_value: incomingPayload.temp_value !== undefined ? incomingPayload.temp_value : prev.temp_value,
+                  ec_value: incomingPayload.ec_value !== undefined ? incomingPayload.ec_value : prev.ec_value,
+                  ph_value: incomingPayload.ph_value !== undefined ? incomingPayload.ph_value : prev.ph_value,
+                  water_level: incomingPayload.water_level !== undefined ? incomingPayload.water_level : prev.water_level,
                   err_water: incomingPayload.err_water !== undefined ? incomingPayload.err_water : prev.err_water,
+                  is_continuous: incomingPayload.is_continuous !== undefined ? incomingPayload.is_continuous : prev.is_continuous,
+                  // KẾT LIỄU LỖI CẤN: KHÔNG lấy rssi, free_heap của Sensor đè vào đây. Dành chỗ đó cho Controller.
                 };
               });
 
-              setDeviceStatus(prev => !prev.is_online ? { is_online: true, last_seen: new Date().toISOString() } : prev);
+              // CHỈ reset Watchdog của Sensor. Không đụng tới is_online của hệ thống.
               resetSensorTimeout();
             }
 
-            // 4. XỬ LÝ ĐỘC LẬP BẢN TIN HEALTH CỦA CONTROLLER (Nếu Backend tách riêng)
+            // =====================================
+            // 4. LUỒNG CONTROLLER HEALTH
+            // =====================================
             if (data.type === 'device_health') {
               const healthData = data.payload;
+
+              // Cập nhật Sức khỏe Controller vào biến độc lập
+              setControllerHealth({
+                rssi: healthData.rssi,
+                free_heap: healthData.free_heap,
+                uptime: healthData.uptime_sec
+              });
+
+              // Cập nhật riêng trạng thái bơm vào sensorData để UI đồng bộ trạng thái FSM
               setSensorData(prev => {
                 if (!prev) return prev;
-                return {
-                  ...prev,
-                  rssi: healthData.rssi !== undefined ? healthData.rssi : prev.rssi,
-                  free_heap: healthData.free_heap !== undefined ? healthData.free_heap : prev.free_heap,
-                  uptime: healthData.uptime_sec !== undefined ? healthData.uptime_sec : prev.uptime,
-                  // Nếu Controller gửi pump_status đính kèm trong bản tin health thì chèn vào luôn
-                  pump_status: healthData.pump_status ? healthData.pump_status : prev.pump_status,
-                };
+                return { ...prev, pump_status: healthData.pump_status };
               });
-              resetSensorTimeout();
+
+              setDeviceStatus(prev => !prev.is_online ? { is_online: true, last_seen: new Date().toISOString() } : prev);
+              resetControllerTimeout();
             }
 
           } catch (err) {
@@ -215,15 +233,13 @@ export const DeviceProvider = ({ children }: { children: ReactNode }) => {
           console.log('🔴 [GlobalContext] Mất kết nối WebSocket. Đang thử kết nối lại...');
           setDeviceStatus({ is_online: false, last_seen: '' });
           clearInterval(pingInterval);
+          if (controllerTimeoutRef.current) clearTimeout(controllerTimeoutRef.current);
           if (sensorTimeoutRef.current) clearTimeout(sensorTimeoutRef.current);
 
           reconnectTimeout = setTimeout(() => { connectWs(); }, 5000);
         };
 
-        ws.onerror = (err) => {
-          console.error("⚠️ [GlobalContext] Lỗi kết nối WebSocket:", err);
-          ws.close();
-        };
+        ws.onerror = (_err) => ws.close();
       };
 
       connectWs();
@@ -234,13 +250,14 @@ export const DeviceProvider = ({ children }: { children: ReactNode }) => {
     return () => {
       clearInterval(pingInterval);
       clearTimeout(reconnectTimeout);
+      if (controllerTimeoutRef.current) clearTimeout(controllerTimeoutRef.current);
       if (sensorTimeoutRef.current) clearTimeout(sensorTimeoutRef.current);
       if (ws) {
         ws.onclose = null;
         ws.close();
       }
     };
-  }, [deviceId, settings, resetSensorTimeout]);
+  }, [deviceId, settings, resetControllerTimeout, resetSensorTimeout]);
 
   const updatePumpStatusOptimistically = useCallback((stateKey: string, isNowOn: boolean) => {
     setSensorData(prevData => {
@@ -257,7 +274,7 @@ export const DeviceProvider = ({ children }: { children: ReactNode }) => {
 
   return (
     <DeviceContext.Provider value={{
-      deviceId, sensorData, deviceStatus, fsmState, isLoading, updatePumpStatusOptimistically, settings, systemEvents
+      deviceId, sensorData, deviceStatus, fsmState, isLoading, updatePumpStatusOptimistically, settings, systemEvents, controllerHealth
     }}>
       {children}
     </DeviceContext.Provider>

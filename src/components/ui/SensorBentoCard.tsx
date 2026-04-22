@@ -1,11 +1,9 @@
-import React from 'react';
-
 interface SensorBentoCardProps {
   title: string;
   value: number | string | null;
   unit?: string;
   icon: React.ElementType;
-  theme: 'blue' | 'fuchsia' | 'orange' | 'cyan';
+  theme: 'blue' | 'fuchsia' | 'orange' | 'cyan' | 'rose';
 }
 
 const themeClasses = {
@@ -13,6 +11,7 @@ const themeClasses = {
   fuchsia: { text: 'text-fuchsia-400', glow: 'bg-fuchsia-500/10' },
   orange: { text: 'text-orange-400', glow: 'bg-orange-500/10' },
   cyan: { text: 'text-cyan-400', glow: 'bg-cyan-500/10' },
+  rose: { text: 'text-rose-400', glow: 'bg-rose-500/10' }, // Đã thêm style cho màu rose
 };
 
 export const SensorBentoCard: React.FC<SensorBentoCardProps> = ({ title, value, unit, icon: Icon, theme }) => {
