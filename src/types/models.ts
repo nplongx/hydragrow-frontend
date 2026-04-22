@@ -34,6 +34,9 @@ export interface SensorData extends DeviceHealth {
   free_heap?: number;
   uptime?: number;
   err_water?: boolean;
+  err_temp?: boolean;
+  err_ph?: boolean;
+  err_ec?: boolean;
   is_continuous?: boolean;
 }
 

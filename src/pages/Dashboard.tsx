@@ -174,21 +174,79 @@ const Dashboard = () => {
         <SensorBentoCard title="Độ pH" value={sensorData.ph_value} icon={Droplets} theme="fuchsia" />
         <SensorBentoCard title="Nhiệt độ" value={sensorData.temp_value} unit="°C" icon={Thermometer} theme="orange" />
 
-        <div className="relative">
-          {sensorData.err_water && (
-            <div className="absolute -top-2 -right-2 z-20 bg-rose-500 text-white p-1 rounded-full animate-bounce shadow-lg shadow-rose-500/50">
-              <AlertTriangle size={14} />
+        <div className="grid grid-cols-2 gap-4 relative z-10">
+
+          {/* EC Card */}
+          <div className="relative">
+            {sensorData.err_ec && (
+              <div className="absolute -top-2 -right-2 z-20 bg-rose-500 text-white p-1 rounded-full animate-bounce shadow-lg shadow-rose-500/50">
+                <AlertTriangle size={14} />
+              </div>
+            )}
+            <div className={sensorData.err_ec ? "opacity-50 ring-2 ring-rose-500/50 rounded-[2rem] transition-all duration-300" : "transition-all duration-300"}>
+              <SensorBentoCard
+                title="Dinh dưỡng (EC)"
+                value={sensorData.err_ec ? -1 : sensorData.ec_value}
+                unit="mS/cm"
+                icon={Activity}
+                theme={sensorData.err_ec ? "rose" : "blue"}
+              />
             </div>
-          )}
-          <div className={sensorData.err_water ? "opacity-50 ring-2 ring-rose-500/50 rounded-[2rem]" : ""}>
-            <SensorBentoCard
-              title="Mực nước"
-              value={sensorData.err_water ? -1 : sensorData.water_level}
-              unit="%"
-              icon={Waves}
-              theme={sensorData.err_water ? "rose" : "cyan"}
-            />
           </div>
+
+          {/* pH Card */}
+          <div className="relative">
+            {sensorData.err_ph && (
+              <div className="absolute -top-2 -right-2 z-20 bg-rose-500 text-white p-1 rounded-full animate-bounce shadow-lg shadow-rose-500/50">
+                <AlertTriangle size={14} />
+              </div>
+            )}
+            <div className={sensorData.err_ph ? "opacity-50 ring-2 ring-rose-500/50 rounded-[2rem] transition-all duration-300" : "transition-all duration-300"}>
+              <SensorBentoCard
+                title="Độ pH"
+                value={sensorData.err_ph ? -1 : sensorData.ph_value}
+                icon={Droplets}
+                theme={sensorData.err_ph ? "rose" : "fuchsia"}
+              />
+            </div>
+          </div>
+
+          {/* Temp Card */}
+          <div className="relative">
+            {sensorData.err_temp && (
+              <div className="absolute -top-2 -right-2 z-20 bg-rose-500 text-white p-1 rounded-full animate-bounce shadow-lg shadow-rose-500/50">
+                <AlertTriangle size={14} />
+              </div>
+            )}
+            <div className={sensorData.err_temp ? "opacity-50 ring-2 ring-rose-500/50 rounded-[2rem] transition-all duration-300" : "transition-all duration-300"}>
+              <SensorBentoCard
+                title="Nhiệt độ"
+                value={sensorData.err_temp ? -1 : sensorData.temp_value}
+                unit="°C"
+                icon={Thermometer}
+                theme={sensorData.err_temp ? "rose" : "orange"}
+              />
+            </div>
+          </div>
+
+          {/* Water Card */}
+          <div className="relative">
+            {sensorData.err_water && (
+              <div className="absolute -top-2 -right-2 z-20 bg-rose-500 text-white p-1 rounded-full animate-bounce shadow-lg shadow-rose-500/50">
+                <AlertTriangle size={14} />
+              </div>
+            )}
+            <div className={sensorData.err_water ? "opacity-50 ring-2 ring-rose-500/50 rounded-[2rem] transition-all duration-300" : "transition-all duration-300"}>
+              <SensorBentoCard
+                title="Mực nước"
+                value={sensorData.err_water ? -1 : sensorData.water_level}
+                unit="%"
+                icon={Waves}
+                theme={sensorData.err_water ? "rose" : "cyan"}
+              />
+            </div>
+          </div>
+
         </div>
       </div>
 

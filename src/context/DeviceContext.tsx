@@ -192,8 +192,13 @@ export const DeviceProvider = ({ children }: { children: ReactNode }) => {
                   ph_value: incomingPayload.ph_value !== undefined ? incomingPayload.ph_value : prev.ph_value,
                   water_level: incomingPayload.water_level !== undefined ? incomingPayload.water_level : prev.water_level,
                   err_water: incomingPayload.err_water !== undefined ? incomingPayload.err_water : prev.err_water,
+                  err_temp: incomingPayload.err_temp !== undefined ? incomingPayload.err_temp : prev.err_temp,
+                  err_ph: incomingPayload.err_ph !== undefined ? incomingPayload.err_ph : prev.err_ph,
+                  err_ec: incomingPayload.err_ec !== undefined ? incomingPayload.err_ec : prev.err_ec,
                   is_continuous: incomingPayload.is_continuous !== undefined ? incomingPayload.is_continuous : prev.is_continuous,
-                  // KẾT LIỄU LỖI CẤN: KHÔNG lấy rssi, free_heap của Sensor đè vào đây. Dành chỗ đó cho Controller.
+                  rssi: incomingPayload.rssi !== undefined ? incomingPayload.rssi : prev.rssi,
+                  free_heap: incomingPayload.free_heap !== undefined ? incomingPayload.free_heap : prev.free_heap,
+                  uptime: incomingPayload.uptime !== undefined ? incomingPayload.uptime : prev.uptime,
                 };
               });
 
