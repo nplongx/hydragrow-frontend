@@ -40,23 +40,24 @@ export const DeviceProvider = ({ children }: { children: ReactNode }) => {
   const resetControllerTimeout = useCallback(() => {
     if (controllerTimeoutRef.current) clearTimeout(controllerTimeoutRef.current);
 
+    // Tăng từ 15000ms lên 60000ms (60 giây)
     controllerTimeoutRef.current = setTimeout(() => {
       setDeviceStatus({ is_online: false, last_seen: '' });
       setFsmState("Offline");
       setSensorData(prev => prev ? { ...prev, pump_status: {} as any } : prev);
       toast.error("Mất tín hiệu từ Trạm Điều Khiển (Controller)!");
-    }, 15000);
+    }, 65000);
   }, []);
 
   const resetSensorTimeout = useCallback(() => {
     if (sensorTimeoutRef.current) clearTimeout(sensorTimeoutRef.current);
 
+    // Tương tự, tăng timeout cho Sensor lên 60 giây
     sensorTimeoutRef.current = setTimeout(() => {
-      // 🟢 CẬP NHẬT: Đánh sập trạng thái của Sensor khi Timeout
       setIsSensorOnline(false);
       setSensorData(prev => prev ? { ...prev, err_water: true, err_temp: true, err_ec: true, err_ph: true } : prev);
       toast.error("Mất kết nối với Mạch Cảm Biến!");
-    }, 15000);
+    }, 65000);
   }, []);
 
   useEffect(() => {
@@ -129,8 +130,9 @@ export const DeviceProvider = ({ children }: { children: ReactNode }) => {
           try {
             const data = JSON.parse(event.data);
 
-            if (data.type === 'status' || (data.type === 'alert' && data.payload.title === 'Trạng thái Trạm Điều Khiển')) {
-              const isOnline = data.type === 'status' ? data.payload.online : data.payload.level === 'success';
+            if (data.type === 'device_status' || (data.type === 'alert' && data.payload.title === 'Trạng thái Trạm Điều Khiển')) {
+              // Đã sửa 'status' -> 'device_status' và 'online' -> 'is_online'
+              const isOnline = data.type === 'device_status' ? data.payload.is_online : data.payload.level === 'success';
               setDeviceStatus({ is_online: isOnline, last_seen: new Date().toISOString() });
 
               if (isOnline) {
@@ -167,6 +169,7 @@ export const DeviceProvider = ({ children }: { children: ReactNode }) => {
                 setSystemEvents(prev => [alert, ...prev].slice(0, 50));
               } else {
                 setFsmState(alert.message);
+                resetControllerTimeout(); // BỔ SUNG: Báo hiệu controller vẫn đang sống
                 return;
               }
 
