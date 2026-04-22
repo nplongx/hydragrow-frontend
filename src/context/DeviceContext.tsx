@@ -137,11 +137,10 @@ export const DeviceProvider = ({ children }: { children: ReactNode }) => {
             const data = JSON.parse(event.data);
 
             // =====================================
-            // 1. CẢNH BÁO LWT TỪ CONTROLLER
+            // 1. CẢNH BÁO LWT (Mất kết nối đột ngột)
             // =====================================
-            if (data.type === 'status' || (data.type === 'alert' && data.payload.title === 'Trạng thái thiết bị')) {
+            if (data.type === 'status' || (data.type === 'alert' && data.payload.title === 'Trạng thái Trạm Điều Khiển')) {
               const isOnline = data.type === 'status' ? data.payload.online : data.payload.level === 'success';
-
               setDeviceStatus({ is_online: isOnline, last_seen: new Date().toISOString() });
 
               if (isOnline) {
@@ -152,6 +151,20 @@ export const DeviceProvider = ({ children }: { children: ReactNode }) => {
                 if (controllerTimeoutRef.current) clearTimeout(controllerTimeoutRef.current);
                 setFsmState("Offline");
                 setSensorData(prev => prev ? { ...prev, pump_status: {} as any } : prev);
+              }
+              return;
+            }
+
+            if (data.type === 'alert' && data.payload.title === 'Trạng thái Mạch Cảm Biến') {
+              const isSensorOnline = data.payload.level === 'success';
+              if (!isSensorOnline) {
+                toast.error("Mạch Cảm Biến đã mất kết nối!");
+                // Đánh đỏ toàn bộ 4 thẻ cảm biến, nhưng không đánh sập Controller
+                setSensorData(prev => prev ? { ...prev, err_water: true, err_temp: true, err_ph: true, err_ec: true } : prev);
+                if (sensorTimeoutRef.current) clearTimeout(sensorTimeoutRef.current);
+              } else {
+                toast.success("Mạch Cảm Biến đã trực tuyến!");
+                resetSensorTimeout();
               }
               return;
             }
