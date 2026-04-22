@@ -65,7 +65,7 @@ const HealthBar = ({ title, icon: Icon, data, isNodeOnline }: { title: string, i
 );
 
 const Dashboard = () => {
-  const { deviceId, sensorData, deviceStatus, controllerHealth, fsmState, isLoading, updatePumpStatusOptimistically, isSensorOnline } = useDeviceContext();
+  const { deviceId, sensorData, deviceStatus, isControllerStatusKnown, controllerHealth, fsmState, isLoading, updatePumpStatusOptimistically, isSensorOnline } = useDeviceContext();
   const { isProcessing, togglePump } = useDeviceControl(deviceId || "");
 
   if (isLoading || !sensorData) {
@@ -124,7 +124,7 @@ const Dashboard = () => {
                   {isOnline && <span className="animate-ping absolute h-full w-full rounded-full bg-emerald-400 opacity-75"></span>}
                 </span>
                 <span className="text-[10px] font-bold uppercase tracking-wider">
-                  {isOnline ? 'Đang Hoạt Động' : 'Mất Kết Nối'}
+                  {isOnline ? 'Đang Hoạt Động' : (isControllerStatusKnown ? 'Mất Kết Nối' : 'Đang Đồng Bộ')}
                 </span>
               </div>
               <span className="text-xs text-slate-500 font-mono">{deviceId}</span>
