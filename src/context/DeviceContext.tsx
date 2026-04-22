@@ -14,6 +14,7 @@ interface DeviceContextType {
   isLoading: boolean;
   updatePumpStatusOptimistically: (stateKey: string, isNowOn: boolean) => void;
   systemEvents: any[];
+  isSensorOnline: boolean; // 🟢 THÊM: Biến quản lý Online/Offline của Sensor Node
 }
 
 const DeviceContext = createContext<DeviceContextType | undefined>(undefined);
@@ -22,43 +23,38 @@ export const DeviceProvider = ({ children }: { children: ReactNode }) => {
   const [deviceId, setDeviceId] = useState<string | null>(null);
   const [settings, setSettings] = useState<any>(null);
 
-  // Dù tên là sensorData nhưng giờ nó đóng vai trò là Global Device State (chứa cả sensor + pump)
   const [sensorData, setSensorData] = useState<SensorData | null>(null);
-
   const [controllerHealth, setControllerHealth] = useState<any>(null);
 
-  // deviceStatus bây giờ CHỈ đại diện cho MẠCH ĐIỀU KHIỂN (Controller)
   const [deviceStatus, setDeviceStatus] = useState<StatusPayload>({ is_online: false, last_seen: '' });
   const [fsmState, setFsmState] = useState<string>("Offline");
   const [systemEvents, setSystemEvents] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  // ==========================================
-  // 🟢 TÁCH 2 WATCHDOG RIÊNG BIỆT CHO 2 NODE
-  // ==========================================
+  // 🟢 THÊM: Quản lý Online/Offline của Sensor Node
+  const [isSensorOnline, setIsSensorOnline] = useState<boolean>(false);
+
   const controllerTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const sensorTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  // 1. Xử lý khi Controller mất tín hiệu
   const resetControllerTimeout = useCallback(() => {
     if (controllerTimeoutRef.current) clearTimeout(controllerTimeoutRef.current);
 
     controllerTimeoutRef.current = setTimeout(() => {
       setDeviceStatus({ is_online: false, last_seen: '' });
       setFsmState("Offline");
-      // Mất controller thì không biết trạng thái bơm, clear pump_status
       setSensorData(prev => prev ? { ...prev, pump_status: {} as any } : prev);
       toast.error("Mất tín hiệu từ Trạm Điều Khiển (Controller)!");
     }, 15000);
   }, []);
 
-  // 2. Xử lý khi Sensor Node mất tín hiệu
   const resetSensorTimeout = useCallback(() => {
     if (sensorTimeoutRef.current) clearTimeout(sensorTimeoutRef.current);
 
     sensorTimeoutRef.current = setTimeout(() => {
-      // Chỉ bật cờ lỗi nước để làm mờ UI cảm biến, KHÔNG ĐÁNH SẬP is_online của toàn hệ thống
-      setSensorData(prev => prev ? { ...prev, err_water: true } : prev);
+      // 🟢 CẬP NHẬT: Đánh sập trạng thái của Sensor khi Timeout
+      setIsSensorOnline(false);
+      setSensorData(prev => prev ? { ...prev, err_water: true, err_temp: true, err_ec: true, err_ph: true } : prev);
       toast.error("Mất kết nối với Mạch Cảm Biến!");
     }, 15000);
   }, []);
@@ -90,7 +86,6 @@ export const DeviceProvider = ({ children }: { children: ReactNode }) => {
 
     const setupConnection = async () => {
       setIsLoading(true);
-      // Fetch data mồi...
       try {
         const url = `${settings.backend_url}/api/devices/${deviceId}/sensors/latest`;
         const response = await fetch(url, {
@@ -104,7 +99,6 @@ export const DeviceProvider = ({ children }: { children: ReactNode }) => {
       } catch (err) { /* empty */ }
       setIsLoading(false);
 
-      // Fetch events...
       try {
         const res = await fetch(`${settings.backend_url}/api/devices/${deviceId}/events`, {
           method: 'GET',
@@ -123,7 +117,6 @@ export const DeviceProvider = ({ children }: { children: ReactNode }) => {
 
         ws.onopen = () => {
           console.log('🟢 [GlobalContext] Đã kết nối tới Server WebSocket');
-          // Khởi động cả 2 bộ đếm an toàn
           resetControllerTimeout();
           resetSensorTimeout();
 
@@ -136,9 +129,6 @@ export const DeviceProvider = ({ children }: { children: ReactNode }) => {
           try {
             const data = JSON.parse(event.data);
 
-            // =====================================
-            // 1. CẢNH BÁO LWT (Mất kết nối đột ngột)
-            // =====================================
             if (data.type === 'status' || (data.type === 'alert' && data.payload.title === 'Trạng thái Trạm Điều Khiển')) {
               const isOnline = data.type === 'status' ? data.payload.online : data.payload.level === 'success';
               setDeviceStatus({ is_online: isOnline, last_seen: new Date().toISOString() });
@@ -155,11 +145,13 @@ export const DeviceProvider = ({ children }: { children: ReactNode }) => {
               return;
             }
 
+            // 🟢 CẬP NHẬT: Xử lý LWT của Sensor Node
             if (data.type === 'alert' && data.payload.title === 'Trạng thái Mạch Cảm Biến') {
-              const isSensorOnline = data.payload.level === 'success';
-              if (!isSensorOnline) {
+              const onlineStatus = data.payload.level === 'success';
+              setIsSensorOnline(onlineStatus);
+
+              if (!onlineStatus) {
                 toast.error("Mạch Cảm Biến đã mất kết nối!");
-                // Đánh đỏ toàn bộ 4 thẻ cảm biến, nhưng không đánh sập Controller
                 setSensorData(prev => prev ? { ...prev, err_water: true, err_temp: true, err_ph: true, err_ec: true } : prev);
                 if (sensorTimeoutRef.current) clearTimeout(sensorTimeoutRef.current);
               } else {
@@ -169,9 +161,6 @@ export const DeviceProvider = ({ children }: { children: ReactNode }) => {
               return;
             }
 
-            // =====================================
-            // 2. SỰ KIỆN ALERTS & FSM
-            // =====================================
             if (data.type === 'alert') {
               const alert = data.payload;
               if (alert.level !== 'FSM_UPDATE') {
@@ -190,9 +179,6 @@ export const DeviceProvider = ({ children }: { children: ReactNode }) => {
               return;
             }
 
-            // =====================================
-            // 3. LUỒNG SENSOR (Từ Cảm Biến)
-            // =====================================
             if (data.type === 'sensor_update') {
               const incomingPayload = data.payload.data || data.payload;
 
@@ -215,24 +201,20 @@ export const DeviceProvider = ({ children }: { children: ReactNode }) => {
                 };
               });
 
-              // CHỈ reset Watchdog của Sensor. Không đụng tới is_online của hệ thống.
+              // 🟢 CẬP NHẬT: Khi nhận data tức là đang Online
+              setIsSensorOnline(true);
               resetSensorTimeout();
             }
 
-            // =====================================
-            // 4. LUỒNG CONTROLLER HEALTH
-            // =====================================
             if (data.type === 'device_health') {
               const healthData = data.payload;
 
-              // Cập nhật Sức khỏe Controller vào biến độc lập
               setControllerHealth({
                 rssi: healthData.rssi,
                 free_heap: healthData.free_heap,
                 uptime: healthData.uptime_sec
               });
 
-              // Cập nhật riêng trạng thái bơm vào sensorData để UI đồng bộ trạng thái FSM
               setSensorData(prev => {
                 if (!prev) return prev;
                 return { ...prev, pump_status: healthData.pump_status };
@@ -250,6 +232,7 @@ export const DeviceProvider = ({ children }: { children: ReactNode }) => {
         ws.onclose = () => {
           console.log('🔴 [GlobalContext] Mất kết nối WebSocket. Đang thử kết nối lại...');
           setDeviceStatus({ is_online: false, last_seen: '' });
+          setIsSensorOnline(false); // 🟢 Mất Websocket -> Sensor Offline
           clearInterval(pingInterval);
           if (controllerTimeoutRef.current) clearTimeout(controllerTimeoutRef.current);
           if (sensorTimeoutRef.current) clearTimeout(sensorTimeoutRef.current);
@@ -291,8 +274,9 @@ export const DeviceProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   return (
+    // 🟢 THÊM: Truyền isSensorOnline ra ngoài Provider
     <DeviceContext.Provider value={{
-      deviceId, sensorData, deviceStatus, fsmState, isLoading, updatePumpStatusOptimistically, settings, systemEvents, controllerHealth
+      deviceId, sensorData, deviceStatus, controllerHealth, fsmState, isLoading, updatePumpStatusOptimistically, settings, systemEvents, isSensorOnline
     }}>
       {children}
     </DeviceContext.Provider>

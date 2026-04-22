@@ -32,13 +32,22 @@ const getWifiColor = (rssi?: number) => {
   return "text-rose-500";
 };
 
-const HealthBar = ({ title, icon: Icon, data }: { title: string, icon: any, data?: any }) => (
-  <div className="flex flex-col gap-2 bg-slate-900/60 border border-slate-800/80 p-3 rounded-2xl shadow-inner">
-    <div className="flex items-center gap-1.5 text-slate-400">
-      <Icon size={14} className={data ? "text-indigo-400" : "text-slate-600"} />
-      <span className="text-[10px] font-black uppercase tracking-widest">{title}</span>
+// 🟢 KHỐI HEALTH BAR ĐÃ ĐƯỢC KHÔI PHỤC VÀ TỐI ƯU UI
+const HealthBar = ({ title, icon: Icon, data, isNodeOnline }: { title: string, icon: any, data?: any, isNodeOnline: boolean }) => (
+  <div className={`flex flex-col gap-2 bg-slate-900/60 border p-3 rounded-2xl shadow-inner transition-colors duration-500 ${isNodeOnline ? 'border-slate-700/80 shadow-[0_0_15px_rgba(16,185,129,0.05)]' : 'border-rose-500/30 shadow-[0_0_15px_rgba(244,63,94,0.1)]'}`}>
+    <div className="flex items-center justify-between">
+      <div className="flex items-center gap-1.5 text-slate-400">
+        <Icon size={14} className={isNodeOnline ? "text-indigo-400" : "text-rose-400"} />
+        <span className="text-[10px] font-black uppercase tracking-widest">{title}</span>
+      </div>
+      {/* Nút báo hiệu Online/Offline nhỏ xíu ở góc */}
+      <span className="relative flex h-2 w-2 rounded-full">
+        <span className={`absolute inline-flex h-full w-full rounded-full opacity-75 ${isNodeOnline ? 'animate-ping bg-emerald-400' : 'bg-rose-500'}`}></span>
+        <span className={`relative inline-flex rounded-full h-2 w-2 ${isNodeOnline ? 'bg-emerald-500' : 'bg-rose-500'}`}></span>
+      </span>
     </div>
-    <div className="flex items-center gap-2 overflow-x-auto hide-scrollbar">
+
+    <div className={`flex items-center gap-2 overflow-x-auto hide-scrollbar ${!isNodeOnline ? 'opacity-50 grayscale' : ''}`}>
       <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg border border-slate-800/80 bg-slate-950/80 text-[10px] font-mono text-slate-300 whitespace-nowrap">
         <Wifi size={12} className={getWifiColor(data?.rssi)} />
         {data?.rssi ? `${data.rssi} dBm` : '--'}
@@ -56,7 +65,7 @@ const HealthBar = ({ title, icon: Icon, data }: { title: string, icon: any, data
 );
 
 const Dashboard = () => {
-  const { deviceId, sensorData, deviceStatus, controllerHealth, fsmState, isLoading, updatePumpStatusOptimistically } = useDeviceContext();
+  const { deviceId, sensorData, deviceStatus, controllerHealth, fsmState, isLoading, updatePumpStatusOptimistically, isSensorOnline } = useDeviceContext();
   const { isProcessing, togglePump } = useDeviceControl(deviceId || "");
 
   if (isLoading || !sensorData) {
@@ -90,14 +99,13 @@ const Dashboard = () => {
   }
 
   const isOnline = deviceStatus?.is_online;
-  // 🟢 Đã fix lỗi Type Checking bằng cách khai báo kiểu any
-  const pumps: any = isOnline && sensorData.pump_status ? sensorData.pump_status : {};
+  const pumps: any = isOnline && sensorData?.pump_status ? sensorData.pump_status : {};
 
-  const handleToggle = async (pumpId: string, currentStatus: boolean) => {
+  const handleToggle = async (pumpId: string, currentStatus: boolean | undefined) => {
     const targetAction = currentStatus ? 'off' : 'on';
-    updatePumpStatusOptimistically(pumpId, currentStatus);
+    updatePumpStatusOptimistically(pumpId, targetAction === 'on');
     const success = await togglePump(pumpId, targetAction);
-    if (!success) updatePumpStatusOptimistically(pumpId, currentStatus);
+    if (!success) updatePumpStatusOptimistically(pumpId, !!currentStatus);
   };
 
   return (
@@ -124,10 +132,11 @@ const Dashboard = () => {
           </div>
         </div>
 
+        {/* 🟢 KHU VỰC HIỂN THỊ SỨC KHỎE 2 NODE ĐỘC LẬP */}
         {isOnline && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-2">
-            <HealthBar title="Controller Node" icon={Server} data={controllerHealth} />
-            <HealthBar title="Sensor Node" icon={RadioReceiver} data={sensorData} />
+            <HealthBar title="Controller Node" icon={Server} data={controllerHealth} isNodeOnline={true} />
+            <HealthBar title="Sensor Node" icon={RadioReceiver} data={sensorData} isNodeOnline={isSensorOnline} />
           </div>
         )}
       </div>
@@ -169,85 +178,80 @@ const Dashboard = () => {
         </div>
       </div>
 
+      {/* 3. LƯỚI CẢM BIẾN (Đã sửa lỗi hiển thị Mực nước và các cờ lỗi) */}
       <div className="grid grid-cols-2 gap-4 relative z-10">
-        <SensorBentoCard title="Dinh dưỡng (EC)" value={sensorData.ec_value} unit="mS/cm" icon={Activity} theme="blue" />
-        <SensorBentoCard title="Độ pH" value={sensorData.ph_value} icon={Droplets} theme="fuchsia" />
-        <SensorBentoCard title="Nhiệt độ" value={sensorData.temp_value} unit="°C" icon={Thermometer} theme="orange" />
 
-        <div className="grid grid-cols-2 gap-4 relative z-10">
-
-          {/* EC Card */}
-          <div className="relative">
-            {sensorData.err_ec && (
-              <div className="absolute -top-2 -right-2 z-20 bg-rose-500 text-white p-1 rounded-full animate-bounce shadow-lg shadow-rose-500/50">
-                <AlertTriangle size={14} />
-              </div>
-            )}
-            <div className={sensorData.err_ec ? "opacity-50 ring-2 ring-rose-500/50 rounded-[2rem] transition-all duration-300" : "transition-all duration-300"}>
-              <SensorBentoCard
-                title="Dinh dưỡng (EC)"
-                value={sensorData.err_ec ? -1 : sensorData.ec_value}
-                unit="mS/cm"
-                icon={Activity}
-                theme={sensorData.err_ec ? "rose" : "blue"}
-              />
+        {/* Thẻ Dinh Dưỡng EC */}
+        <div className="relative">
+          {sensorData?.err_ec === true && (
+            <div className="absolute -top-2 -right-2 z-20 bg-rose-500 text-white p-1 rounded-full animate-bounce shadow-lg shadow-rose-500/50">
+              <AlertTriangle size={14} />
             </div>
+          )}
+          <div className={sensorData?.err_ec === true ? "opacity-50 ring-2 ring-rose-500/50 rounded-[2rem] transition-all duration-300" : "transition-all duration-300"}>
+            <SensorBentoCard
+              title="Dinh dưỡng (EC)"
+              value={sensorData?.err_ec === true ? -1 : sensorData?.ec_value}
+              unit="mS/cm"
+              icon={Activity}
+              theme={sensorData?.err_ec === true ? "rose" : "blue"}
+            />
           </div>
-
-          {/* pH Card */}
-          <div className="relative">
-            {sensorData.err_ph && (
-              <div className="absolute -top-2 -right-2 z-20 bg-rose-500 text-white p-1 rounded-full animate-bounce shadow-lg shadow-rose-500/50">
-                <AlertTriangle size={14} />
-              </div>
-            )}
-            <div className={sensorData.err_ph ? "opacity-50 ring-2 ring-rose-500/50 rounded-[2rem] transition-all duration-300" : "transition-all duration-300"}>
-              <SensorBentoCard
-                title="Độ pH"
-                value={sensorData.err_ph ? -1 : sensorData.ph_value}
-                icon={Droplets}
-                theme={sensorData.err_ph ? "rose" : "fuchsia"}
-              />
-            </div>
-          </div>
-
-          {/* Temp Card */}
-          <div className="relative">
-            {sensorData.err_temp && (
-              <div className="absolute -top-2 -right-2 z-20 bg-rose-500 text-white p-1 rounded-full animate-bounce shadow-lg shadow-rose-500/50">
-                <AlertTriangle size={14} />
-              </div>
-            )}
-            <div className={sensorData.err_temp ? "opacity-50 ring-2 ring-rose-500/50 rounded-[2rem] transition-all duration-300" : "transition-all duration-300"}>
-              <SensorBentoCard
-                title="Nhiệt độ"
-                value={sensorData.err_temp ? -1 : sensorData.temp_value}
-                unit="°C"
-                icon={Thermometer}
-                theme={sensorData.err_temp ? "rose" : "orange"}
-              />
-            </div>
-          </div>
-
-          {/* Water Card */}
-          <div className="relative">
-            {sensorData.err_water && (
-              <div className="absolute -top-2 -right-2 z-20 bg-rose-500 text-white p-1 rounded-full animate-bounce shadow-lg shadow-rose-500/50">
-                <AlertTriangle size={14} />
-              </div>
-            )}
-            <div className={sensorData.err_water ? "opacity-50 ring-2 ring-rose-500/50 rounded-[2rem] transition-all duration-300" : "transition-all duration-300"}>
-              <SensorBentoCard
-                title="Mực nước"
-                value={sensorData.err_water ? -1 : sensorData.water_level}
-                unit="%"
-                icon={Waves}
-                theme={sensorData.err_water ? "rose" : "cyan"}
-              />
-            </div>
-          </div>
-
         </div>
+
+        {/* Thẻ pH */}
+        <div className="relative">
+          {sensorData?.err_ph === true && (
+            <div className="absolute -top-2 -right-2 z-20 bg-rose-500 text-white p-1 rounded-full animate-bounce shadow-lg shadow-rose-500/50">
+              <AlertTriangle size={14} />
+            </div>
+          )}
+          <div className={sensorData?.err_ph === true ? "opacity-50 ring-2 ring-rose-500/50 rounded-[2rem] transition-all duration-300" : "transition-all duration-300"}>
+            <SensorBentoCard
+              title="Độ pH"
+              value={sensorData?.err_ph === true ? -1 : sensorData?.ph_value}
+              icon={Droplets}
+              theme={sensorData?.err_ph === true ? "rose" : "fuchsia"}
+            />
+          </div>
+        </div>
+
+        {/* Thẻ Nhiệt Độ */}
+        <div className="relative">
+          {sensorData?.err_temp === true && (
+            <div className="absolute -top-2 -right-2 z-20 bg-rose-500 text-white p-1 rounded-full animate-bounce shadow-lg shadow-rose-500/50">
+              <AlertTriangle size={14} />
+            </div>
+          )}
+          <div className={sensorData?.err_temp === true ? "opacity-50 ring-2 ring-rose-500/50 rounded-[2rem] transition-all duration-300" : "transition-all duration-300"}>
+            <SensorBentoCard
+              title="Nhiệt độ"
+              value={sensorData?.err_temp === true ? -1 : sensorData?.temp_value}
+              unit="°C"
+              icon={Thermometer}
+              theme={sensorData?.err_temp === true ? "rose" : "orange"}
+            />
+          </div>
+        </div>
+
+        {/* Thẻ Mực Nước */}
+        <div className="relative">
+          {sensorData?.err_water === true && (
+            <div className="absolute -top-2 -right-2 z-20 bg-rose-500 text-white p-1 rounded-full animate-bounce shadow-lg shadow-rose-500/50">
+              <AlertTriangle size={14} />
+            </div>
+          )}
+          <div className={sensorData?.err_water === true ? "opacity-50 ring-2 ring-rose-500/50 rounded-[2rem] transition-all duration-300" : "transition-all duration-300"}>
+            <SensorBentoCard
+              title="Mực nước"
+              value={sensorData?.err_water === true ? -1 : sensorData?.water_level}
+              unit="%"
+              icon={Waves}
+              theme={sensorData?.err_water === true ? "rose" : "cyan"}
+            />
+          </div>
+        </div>
+
       </div>
 
       <div className="bg-slate-900/40 backdrop-blur-lg border border-slate-800/80 rounded-[2rem] p-5 relative z-10">
